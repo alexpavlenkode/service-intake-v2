@@ -5,6 +5,38 @@ covered by `docs/01-prozessbeschreibung.md` / `docs/03-datenmodell.md`
 (those two remain the source of truth and are never edited). It also carries
 the tradeoff discussion the project prompt asks for in §12.
 
+## Future: the `CanTransition` mechanism (design only - not implemented)
+
+Required by the original prompt (§5, Phase B) as a description, explicitly
+*not* an implementation - it "gehört zur nächsten Phase und kann ohne Flows
+nicht geprüft werden" (belongs to a later phase and can't be verified
+without flows). `hsv_statustransition` now holds the actual configuration
+data (23 rows, see `schema/statustransitions.yaml`); this section describes
+the mechanism intended to consume it.
+
+- A single reusable check, conceptually `CanTransition(entityName,
+  fromStatus, toStatus, trigger)`, queries `hsv_statustransition` for a row
+  where `hsv_entityname`, `hsv_fromstatus`, `hsv_tostatus` and
+  `hsv_allowedtrigger` match and `hsv_isactive = true`.
+- Every automation that would change `hsv_workorder.hsv_status` or
+  `hsv_inboundmessage.hsv_status` calls this check **before** writing the
+  new status, not after - the write only happens if a matching active row
+  exists.
+- If no row matches, the write is skipped and a `hsv_processingattempt` row
+  is logged with `hsv_result = Skipped`, `hsv_reasoncode = INVALID_TRANSITION`
+  (already defined in `schema/choices.yaml`) - this is the "skipped – invalid
+  transition" behavior `docs/01-prozessbeschreibung.md` §5.3 requires for a
+  work order that's already been assigned and gets hit by a duplicate
+  trigger.
+- Because the check is one shared function/flow rather than branch logic
+  copy-pasted into every automation that can move a status, the rules live
+  in exactly one place - `hsv_statustransition` - and changing them later
+  means editing data, not finding every flow that has an opinion about
+  status transitions (see the tradeoff discussion below).
+- Not buildable or testable in this project as it stands: it requires the
+  Power Automate / flow layer, which is out of scope for both the Data
+  Model and Security Model phases completed so far.
+
 ## Resolved discrepancy: solution name
 
 The project prompt names the solution `HSVServiceIntakeV2` / "HSV Service
