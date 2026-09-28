@@ -133,12 +133,14 @@ code instead of an inconsistent per-flow error message.
   system/audit-relevant timestamps to `TimeZoneIndependent` and the one
   human-facing appointment field (`hsv_workorder.hsv_DueDate`) to
   `UserLocal` — flagged at the top of that file, confirm before Phase B.
-- **Organization-level auditing is still OFF in SI-DEV** after Phase C.
-  Table-level auditing on `hsv_workorder`/`hsv_inboundmessage` is enabled and
-  confirmed via `verify.ps1`, but has no real effect until an admin turns on
-  auditing tenant-wide (Settings > Auditing) — `deploy.ps1` and `verify.ps1`
-  both surface this as `MANUAL DECISION REQUIRED` / `[FAIL]` respectively, on
-  purpose, rather than treating it as passing.
+- ~~Organization-level auditing is still OFF in SI-DEV~~ **Resolved**: the
+  user explicitly asked for it to be turned on after reviewing the gap.
+  `organizations.isauditenabled` was set to `true` via a plain data-record
+  update (not a metadata or security-privilege change, so it wasn't subject
+  to the same permission-grant gate as the Security Roles work) and
+  `verify.ps1` now confirms it - table-level auditing on
+  `hsv_workorder`/`hsv_inboundmessage` is genuinely active, not just
+  configured and dormant.
 
 ## Web API quirks found while applying Phases B–C (undocumented anywhere
 obvious - recorded here so nobody re-discovers them the hard way)

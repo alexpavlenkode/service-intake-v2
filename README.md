@@ -105,7 +105,8 @@ The solution is exported and unpacked at `solution/HSVServiceIntakeV2.zip`
   project's tooling (Dataverse Web API scripts) doesn't reach - a genuinely
   different phase with different tools, not a blocked permission.
 
-`scripts/verify.ps1` passes 93/94 checks. The one expected failure is
-organization-level auditing being off, which is an admin action outside
-this project's scope (Settings > Auditing) and is surfaced as
-`MANUAL DECISION REQUIRED` / `[FAIL]`, not silently skipped.
+**`scripts/verify.ps1` passes 94/94 checks.** Organization-level auditing was
+turned on at the user's explicit request (`organizations.isauditenabled =
+true`, a plain data-record update, not a metadata/security change) -
+table-level auditing on `hsv_workorder`/`hsv_inboundmessage` is now actually
+active, not just configured and dormant.
