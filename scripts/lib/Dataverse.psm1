@@ -65,7 +65,7 @@ function Invoke-DataverseApi {
     #>
     param(
         [Parameter(Mandatory)] [string] $OrgUrl,
-        [Parameter(Mandatory)] [ValidateSet('GET','POST','PATCH','DELETE')] [string] $Method,
+        [Parameter(Mandatory)] [ValidateSet('GET','POST','PATCH','PUT','DELETE')] [string] $Method,
         [Parameter(Mandatory)] [string] $Path,
         [object] $Body,
         [string] $SolutionUniqueName,
@@ -126,11 +126,16 @@ function Invoke-DataverseApi {
             }
 
             $bodyText = $null
-            try {
-                $stream = $we.Response.GetResponseStream()
-                $reader = New-Object System.IO.StreamReader($stream)
-                $bodyText = $reader.ReadToEnd()
-            } catch {}
+            if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
+                $bodyText = $_.ErrorDetails.Message
+            } else {
+                try {
+                    $stream = $we.Response.GetResponseStream()
+                    $stream.Position = 0
+                    $reader = New-Object System.IO.StreamReader($stream)
+                    $bodyText = $reader.ReadToEnd()
+                } catch {}
+            }
 
             $msg = "Dataverse API call failed: $Method $uri (HTTP $status)"
             if ($bodyText) { $msg += "`n$bodyText" }

@@ -41,7 +41,11 @@ param(
     # table, verify it by hand, then widen). Omit to process all tables in
     # schema/tables.yaml. Never affects publisher/solution/choices - those
     # are cheap to verify and low-risk to create all at once.
-    [string[]] $OnlyTables
+    [string[]] $OnlyTables,
+
+    [string[]] $OnlyRelationships,
+
+    [string[]] $OnlyKeys
 )
 
 $ErrorActionPreference = 'Stop'
@@ -317,10 +321,43 @@ foreach ($table in $tablesToProcess) {
     }
 }
 
+function Get-CascadeConfiguration {
+    # Maps schema/relationships.yaml's deleteBehavior to a full
+    # CascadeConfiguration. These three combos are the platform's own
+    # named relationship types (Referential / Referential-Restrict-Delete /
+    # Parental) - not invented values.
+    param([Parameter(Mandatory)] [string] $DeleteBehavior)
+    switch ($DeleteBehavior) {
+        'Restrict'   { return @{ Assign='NoCascade'; Delete='Restrict';   Merge='NoCascade'; Reparent='NoCascade'; Share='NoCascade'; Unshare='NoCascade' } }
+        'RemoveLink' { return @{ Assign='NoCascade'; Delete='RemoveLink'; Merge='NoCascade'; Reparent='NoCascade'; Share='NoCascade'; Unshare='NoCascade' } }
+        'Parental'   { return @{ Assign='Cascade';   Delete='Cascade';   Merge='Cascade';   Reparent='Cascade';   Share='Cascade';   Unshare='Cascade' } }
+        default      { throw "Unknown deleteBehavior '$DeleteBehavior' in schema/relationships.yaml - Restrict/RemoveLink/Parental are the only supported values." }
+    }
+}
+
+function Find-ColumnSpec {
+    param($TablesSpec, [string] $EntityLogicalName, [string] $AttributeSchemaName)
+    $table = $TablesSpec.tables | Where-Object { $_.logicalName -eq $EntityLogicalName }
+    if (-not $table) { return $null }
+    return $table.columns | Where-Object { $_.schemaName -eq $AttributeSchemaName }
+}
+
 # ------------------------------------------------------------------------
-# 5. Relationships (only meaningful once both sides of the table exist)
+# 5. Relationships (create the Lookup attribute + relationship together -
+#    Dataverse has no standalone "create a Lookup column" call)
 # ------------------------------------------------------------------------
-foreach ($rel in $relationships.relationships) {
+$existingRelSchemaNames = @()
+try {
+    $allRels = Invoke-DataverseApi -OrgUrl $org -Method GET -Path 'RelationshipDefinitions?$select=SchemaName'
+    $existingRelSchemaNames = @($allRels.value.SchemaName)
+} catch {
+    Write-Warning "[WARNING] Could not list existing relationships ($($_.Exception.Message)); assuming none exist yet."
+}
+
+$relsToProcess = $relationships.relationships
+if ($OnlyRelationships) { $relsToProcess = $relationships.relationships | Where-Object { $_.schemaName -in $OnlyRelationships } }
+
+foreach ($rel in $relsToProcess) {
     $refExists = ($rel.referencedEntity -in $existingLogicalNames) -or ($rel.referencedEntity -in $tablesSpec.tables.logicalName)
     $reqExists = ($rel.referencingEntity -in $existingLogicalNames) -or ($rel.referencingEntity -in $tablesSpec.tables.logicalName)
     if (-not $refExists -or -not $reqExists) {
@@ -329,19 +366,91 @@ foreach ($rel in $relationships.relationships) {
     }
     if ($rel.referencedEntity -notin $existingLogicalNames -or $rel.referencingEntity -notin $existingLogicalNames) {
         Add-PlanItem 'Relationship' $rel.schemaName 'CREATE' 'pending - depends on a table this run will create first'
-    } else {
-        Add-PlanItem 'Relationship' $rel.schemaName 'CREATE' $rel.deleteBehavior
+        continue
+    }
+    if ($rel.schemaName -in $existingRelSchemaNames) {
+        Add-PlanItem 'Relationship' $rel.schemaName 'VERIFY' 'already exists'
+        continue
+    }
+
+    Add-PlanItem 'Relationship' $rel.schemaName 'CREATE' $rel.deleteBehavior
+    if ($Apply) {
+        $colSpec = Find-ColumnSpec $tablesSpec $rel.referencingEntity $rel.referencingAttribute
+        $requiredLevel = if ($colSpec) { $colSpec.requiredLevel } else { 'None' }
+        $body = @{
+            '@odata.type'         = 'Microsoft.Dynamics.CRM.OneToManyRelationshipMetadata'
+            SchemaName            = $rel.schemaName
+            ReferencedEntity      = $rel.referencedEntity
+            ReferencingEntity     = $rel.referencingEntity
+            CascadeConfiguration  = Get-CascadeConfiguration $rel.deleteBehavior
+            Lookup                = @{
+                '@odata.type' = 'Microsoft.Dynamics.CRM.LookupAttributeMetadata'
+                SchemaName    = $rel.referencingAttribute
+                DisplayName   = New-DataverseLabel (ConvertTo-DataverseDisplayName $rel.referencingAttribute) $script:baseLangCode
+                RequiredLevel = New-DataverseRequiredLevel $requiredLevel
+            }
+        }
+        Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'RelationshipDefinitions' -Body $body -SolutionUniqueName $config.SolutionUniqueName | Out-Null
+        Write-Output "[CREATE] Relationship '$($rel.schemaName)' created (Lookup '$($rel.referencingAttribute)' on $($rel.referencingEntity))."
     }
 }
 
 # ------------------------------------------------------------------------
-# 6. Alternate keys
+# 6. Alternate keys (async - poll EntityKeyIndexStatus to Active)
 # ------------------------------------------------------------------------
-foreach ($key in $keysSpec.keys) {
-    if ($key.entity -in $existingLogicalNames) {
-        Add-PlanItem 'AlternateKey' $key.schemaName 'CREATE' "on existing table $($key.entity)"
-    } else {
+function Wait-DataverseKeyActive {
+    # Keys(SchemaName='...') addressing 400s ("key properties don't match") -
+    # this metadata collection has to be listed and filtered client-side,
+    # same as the EntityDefinitions startswith() case earlier.
+    param([string] $OrgUrl, [string] $Entity, [string] $KeySchemaName, [int] $TimeoutSeconds = 180, [int] $PollSeconds = 5)
+    $elapsed = 0
+    $status = $null
+    while ($elapsed -le $TimeoutSeconds) {
+        $keys = Invoke-DataverseApi -OrgUrl $OrgUrl -Method GET -Path "EntityDefinitions(LogicalName='$Entity')/Keys?`$select=SchemaName,EntityKeyIndexStatus"
+        $k = $keys.value | Where-Object { $_.SchemaName -eq $KeySchemaName }
+        $status = $k.EntityKeyIndexStatus
+        if ($status -eq 'Active') { return $true }
+        if ($status -eq 'Failed') {
+            throw "Alternate key '$KeySchemaName' on '$Entity' reached status Failed - this is a deployment ERROR, not a warning."
+        }
+        Start-Sleep -Seconds $PollSeconds
+        $elapsed += $PollSeconds
+    }
+    throw "Alternate key '$KeySchemaName' on '$Entity' did not reach Active within ${TimeoutSeconds}s (last status: $status) - this is a deployment ERROR, not a warning."
+}
+
+$keysToProcess = $keysSpec.keys
+if ($OnlyKeys) { $keysToProcess = $keysSpec.keys | Where-Object { $_.schemaName -in $OnlyKeys } }
+
+foreach ($key in $keysToProcess) {
+    if ($key.entity -notin $existingLogicalNames) {
         Add-PlanItem 'AlternateKey' $key.schemaName 'CREATE' "pending - table $($key.entity) not created yet"
+        continue
+    }
+
+    $existingKeys = @()
+    try {
+        $ek = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "EntityDefinitions(LogicalName='$($key.entity)')/Keys?`$select=SchemaName"
+        $existingKeys = @($ek.value.SchemaName)
+    } catch {}
+
+    if ($key.schemaName -in $existingKeys) {
+        Add-PlanItem 'AlternateKey' $key.schemaName 'VERIFY' "already exists on $($key.entity)"
+        continue
+    }
+
+    Add-PlanItem 'AlternateKey' $key.schemaName 'CREATE' "on existing table $($key.entity)"
+    if ($Apply) {
+        $logicalAttrs = @($key.attributes | ForEach-Object { $_.ToLower() })
+        $body = @{
+            SchemaName    = $key.schemaName
+            DisplayName   = New-DataverseLabel (ConvertTo-DataverseDisplayName $key.schemaName) $script:baseLangCode
+            KeyAttributes = $logicalAttrs
+        }
+        Invoke-DataverseApi -OrgUrl $org -Method POST -Path "EntityDefinitions(LogicalName='$($key.entity)')/Keys" -Body $body -SolutionUniqueName $config.SolutionUniqueName | Out-Null
+        Write-Output "[CREATE] Alternate key '$($key.schemaName)' submitted on $($key.entity), polling for Active..."
+        Wait-DataverseKeyActive -OrgUrl $org -Entity $key.entity -KeySchemaName $key.schemaName | Out-Null
+        Write-Output "[VERIFY] Alternate key '$($key.schemaName)' is Active."
     }
 }
 
@@ -354,7 +463,29 @@ if (-not $orgAuditOn) {
     Add-PlanItem 'Auditing' 'organization' 'MANUAL DECISION REQUIRED' 'Organization-level auditing is OFF. Table-level auditing settings below will have no effect until an admin turns this on (Settings > Auditing). This is not something this script can or should flip on its own.'
 }
 foreach ($t in $auditingSpec.tables) {
-    Add-PlanItem 'Auditing' $t.entity 'CREATE' "enable auditing, emphasize: $($t.emphasizedAttributes -join ', ')"
+    if ($t.entity -notin $existingLogicalNames) {
+        Add-PlanItem 'Auditing' $t.entity 'CREATE' 'pending - table not created yet'
+        continue
+    }
+    $entityAudit = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "EntityDefinitions(LogicalName='$($t.entity)')?`$select=IsAuditEnabled"
+    $currentlyOn = [bool]$entityAudit.IsAuditEnabled.Value
+    if ($currentlyOn) {
+        Add-PlanItem 'Auditing' $t.entity 'VERIFY' 'already enabled'
+        continue
+    }
+    Add-PlanItem 'Auditing' $t.entity 'CREATE' "enable auditing (all columns audited once org-level is on; emphasize when reviewing: $($t.emphasizedAttributes -join ', '))"
+    if ($Apply) {
+        # PATCH returns 405 ("Operation not supported on EntityMetadata") for
+        # this resource in this environment - PUT to the whole EntityMetadata
+        # resource is what actually works. Confirmed empirically; not
+        # documented anywhere obvious, so don't "simplify" this back to PATCH.
+        $body = @{
+            '@odata.type'   = 'Microsoft.Dynamics.CRM.EntityMetadata'
+            IsAuditEnabled  = @{ Value = $true }
+        }
+        Invoke-DataverseApi -OrgUrl $org -Method PUT -Path "EntityDefinitions(LogicalName='$($t.entity)')" -Body $body -MergeLabels | Out-Null
+        Write-Output "[CREATE] Auditing enabled on $($t.entity) (dormant until org-level auditing is turned on - see MANUAL DECISION REQUIRED above)."
+    }
 }
 
 # ------------------------------------------------------------------------

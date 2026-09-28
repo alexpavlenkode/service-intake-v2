@@ -12,15 +12,14 @@ relationships:
     referencingEntity: hsv_serviceobject
     referencingAttribute: hsv_Account
     type: OneToMany
-    cascadeConfiguration:
-      assign: NoCascade
-      delete: RemoveLink   # "Restrict" in Dataverse terms is Referential (block delete while children exist)
-      merge: NoCascade
-      reparent: NoCascade
-      share: NoCascade
-      unshare: NoCascade
     deleteBehavior: Restrict
-    note: Restrict statt Cascade ist Absicht - ein gelöschter Kunde darf keine Auftragshistorie mitreißen.
+    note: >
+      Restrict statt Cascade ist Absicht - ein gelöschter Kunde darf keine
+      Auftragshistorie mitreißen. deploy.ps1 maps deleteBehavior to a full
+      CascadeConfiguration (Restrict/RemoveLink/Parental) - see its
+      Get-CascadeConfiguration helper. Don't add a per-relationship
+      cascadeConfiguration block here too; deleteBehavior is the single
+      source of truth.
 
   - schemaName: hsv_account_workorder
     referencedEntity: account
@@ -90,9 +89,14 @@ relationships:
       hsv_workorder<->hsv_inboundmessage relationship; flag if a stricter
       behavior is actually wanted.
 
-  - schemaName: systemuser_hsv_inboundmessage_decidedby
+  - schemaName: hsv_systemuser_inboundmessage_decidedby
     referencedEntity: systemuser
     referencingEntity: hsv_inboundmessage
     referencingAttribute: hsv_DecidedBy
     type: OneToMany
     deleteBehavior: RemoveLink
+    note: >
+      Renamed from systemuser_hsv_inboundmessage_decidedby - Dataverse
+      rejects relationship schema names that don't start with the solution
+      publisher's own customization prefix (hsv_), even when one side is a
+      standard entity. Confirmed empirically (HTTP 400, code 0x80044366).
