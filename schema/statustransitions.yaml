@@ -1,0 +1,119 @@
+# Configuration rows for hsv_statustransition.
+# Source: docs/01-prozessbeschreibung.md §5.1 (message state machine, full
+# table) and §5.2/§5.3 (work order state machine, much less detailed in the
+# source doc). This is data, not schema - seeded by
+# scripts/seed-statustransitions.ps1, not deploy.ps1.
+#
+# Rows with a combined "Von"/"Nach" cell in the source table (e.g.
+# "Received / Parsed" -> Technical Retry) are split into separate atomic
+# rows here, since hsv_fromstatus/hsv_tostatus are single text values.
+#
+# hsv_allowedtrigger uses the PLACEHOLDER local option set from
+# schema/tables.yaml (System/Disponent/Techniker/Plattformbetreuer) - see the
+# flag at the top of that file. Trigger assignment below is my own
+# best-effort mapping from context (who/what causes each transition per
+# docs/01-prozessbeschreibung.md's process description), not something the
+# source docs state explicitly per row.
+#
+# INFERRED, NOT IN SOURCE DOCS: the work order "Storniert" transitions.
+# docs/01-prozessbeschreibung.md §5.2 only says "Neu -> Zugewiesen -> In
+# Arbeit -> Abgeschlossen, dazu Storniert" without saying which states can
+# reach Storniert. Modeled here as reachable from Neu, Zugewiesen, and In
+# Arbeit (i.e. any non-terminal state) - flagged, confirm before relying on
+# this in a validator.
+
+messageTransitions:
+  - fromStatus: Received
+    toStatus: Parsed
+    trigger: System
+    reason: Parser erfolgreich
+  - fromStatus: Received
+    toStatus: Duplicate
+    trigger: System
+    reason: Message-ID bereits verarbeitet
+  - fromStatus: Received
+    toStatus: Technical Retry
+    trigger: System
+    reason: "temporärer Fehler (429, Timeout, 5xx)"
+  - fromStatus: Parsed
+    toStatus: Technical Retry
+    trigger: System
+    reason: "temporärer Fehler (429, Timeout, 5xx)"
+  - fromStatus: Technical Retry
+    toStatus: Parsed
+    trigger: System
+    reason: Wiederholung erfolgreich
+  - fromStatus: Technical Retry
+    toStatus: Validated
+    trigger: System
+    reason: Wiederholung erfolgreich
+  - fromStatus: Technical Retry
+    toStatus: Failed
+    trigger: System
+    reason: Retry-Budget erschöpft
+  - fromStatus: Parsed
+    toStatus: Validated
+    trigger: System
+    reason: alle Pflichtfelder und Regeln erfüllt
+  - fromStatus: Parsed
+    toStatus: Needs Clarification
+    trigger: System
+    reason: Pflichtfeld fehlt oder Regel verletzt
+  - fromStatus: Parsed
+    toStatus: Not Relevant
+    trigger: System
+    reason: keine Auftragsanfrage
+  - fromStatus: Needs Clarification
+    toStatus: Parsed
+    trigger: System
+    reason: Angaben ergänzt, erneute Verarbeitung
+  - fromStatus: Validated
+    toStatus: Potential Duplicate
+    trigger: System
+    reason: fachlicher Treffer im Zeitfenster
+  - fromStatus: Potential Duplicate
+    toStatus: Converted
+    trigger: Disponent
+    reason: Entscheidung des Disponenten, mit Begründung
+  - fromStatus: Potential Duplicate
+    toStatus: Duplicate
+    trigger: Disponent
+    reason: Entscheidung des Disponenten, mit Begründung
+  - fromStatus: Validated
+    toStatus: Converted
+    trigger: System
+    reason: Auftrag angelegt
+  - fromStatus: Validated
+    toStatus: Linked
+    trigger: System
+    reason: Nachricht gehört zu bestehendem Auftrag
+  - fromStatus: Failed
+    toStatus: Technical Retry
+    trigger: Plattformbetreuer
+    reason: manueller Replay durch Plattformbetreuer
+
+workOrderTransitions:
+  - fromStatus: Neu
+    toStatus: Zugewiesen
+    trigger: Disponent
+    reason: Disponent weist Techniker zu
+  - fromStatus: Zugewiesen
+    toStatus: In Arbeit
+    trigger: Techniker
+    reason: Techniker nimmt Auftrag an
+  - fromStatus: In Arbeit
+    toStatus: Abgeschlossen
+    trigger: Techniker
+    reason: Techniker dokumentiert Abschluss
+  - fromStatus: Neu
+    toStatus: Storniert
+    trigger: Disponent
+    reason: "Auftrag storniert (INFERRED - nicht explizit in docs, siehe Hinweis oben)"
+  - fromStatus: Zugewiesen
+    toStatus: Storniert
+    trigger: Disponent
+    reason: "Auftrag storniert (INFERRED)"
+  - fromStatus: In Arbeit
+    toStatus: Storniert
+    trigger: Disponent
+    reason: "Auftrag storniert (INFERRED)"

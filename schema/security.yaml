@@ -1,0 +1,133 @@
+# Security roles for Service Intake V2.
+# Source: docs/01-prozessbeschreibung.md §2 (role descriptions) and
+# docs/03-datenmodell.md §6 (per-table privilege matrix).
+#
+# SCOPE NOTE: the original project prompt explicitly listed "Security Roles"
+# as out of scope for the Data Model phase ("Nächste Phase - Security
+# Model", §13/§15). This file and scripts/deploy-security.ps1 implement that
+# next phase, using the privilege matrix that was already present in the two
+# source-of-truth docs - no new brief was provided, so anything not directly
+# derivable from that matrix is called out explicitly below rather than
+# guessed.
+#
+# Naming: prefixed "HSV " to avoid any confusion with the pre-existing V1
+# role "SI Auditor" (discovered in SI-DEV, reads pa_/ap_ tables - untouched,
+# never conflated with the "Auditor" role defined here).
+#
+# Depth values match Dataverse's AccessRights depth: 1=User(Basic),
+# 2=BusinessUnit(Local), 3=ParentChild(Deep), 4=Organization(Global).
+# An entity/action pair not listed for a role means "kein Zugriff" - no
+# privilege at all, not even at User depth.
+#
+# INFERRED BEYOND THE LITERAL MATRIX (flagged, not silently added):
+# - Disponent gets Assign on hsv_workorder. The matrix says "CRUD,
+#   Organization" which doesn't literally include Assign, but the role
+#   description ("weist Aufträge zu") requires it - reassigning a work
+#   order to a technician IS an owner change, which needs the Assign
+#   privilege on the assigning user. Without it the role couldn't do its
+#   stated job.
+# - Rows in the matrix without an explicit depth ("hsv_serviceobject /
+#   Account", the Auditor/Plattformbetreuer "Read" cells) are assumed
+#   Organization depth, consistent with those roles needing to see across
+#   the whole business, not just their own records.
+#
+# NOT ADDRESSED HERE (real gap, not an oversight): a Security Role usable in
+# an actual model-driven app also needs baseline platform privileges (own
+# user record, business unit, process/workflow read, etc.) that neither
+# source doc specifies. This file only implements the documented per-table
+# matrix. Do not assume these roles are sufficient for a working app without
+# further review.
+
+roles:
+  - name: HSV Disponent
+    description: >
+      Prüft Eingang, klärt fehlende Angaben, entscheidet über potenzielle
+      Dubletten, weist Aufträge zu. Alle Aufträge, Eingangsregister,
+      Klärungsqueue (docs/01-prozessbeschreibung.md §2).
+    privileges:
+      - entity: hsv_WorkOrder
+        actions: [Create, Read, Write, Delete, Append, AppendTo, Assign]
+        depth: Organization
+      - entity: hsv_InboundMessage
+        actions: [Create, Read, Write, Delete, Append, AppendTo]
+        depth: Organization
+      - entity: hsv_ProcessingAttempt
+        actions: [Read]
+        depth: Organization
+      - entity: hsv_ServiceObject
+        actions: [Read, Write, Append, AppendTo]
+        depth: Organization
+      - entity: Account
+        actions: [Read, Write, Append, AppendTo]
+        depth: Organization
+      - entity: hsv_StatusTransition
+        actions: [Read]
+        depth: Organization
+
+  - name: HSV Techniker
+    description: >
+      Nimmt zugewiesene Aufträge an, dokumentiert Durchführung und
+      Rückmeldung. Nur eigene zugewiesene Aufträge (docs/01-prozessbeschreibung.md §2).
+    privileges:
+      - entity: hsv_WorkOrder
+        actions: [Read, Write, Append, AppendTo]
+        depth: User
+        note: "Read/Write User, kein Delete - Owner = Techniker enforces row-level scoping."
+      - entity: hsv_ServiceObject
+        actions: [Read]
+        depth: Organization
+      - entity: Account
+        actions: [Read]
+        depth: Organization
+      # hsv_InboundMessage, hsv_ProcessingAttempt, hsv_StatusTransition:
+      # kein Zugriff - deliberately absent, not a gap.
+
+  - name: HSV Auditor
+    description: >
+      Prüft Nachvollziehbarkeit, Laufzeiten, Eskalationen; ändert keine
+      Aufträge. Lesend auf alle Aufträge und das Verarbeitungsprotokoll
+      (docs/01-prozessbeschreibung.md §2). Distinct from the pre-existing
+      V1 role "SI Auditor" - do not confuse the two.
+    privileges:
+      - entity: hsv_WorkOrder
+        actions: [Read]
+        depth: Organization
+      - entity: hsv_InboundMessage
+        actions: [Read]
+        depth: Organization
+      - entity: hsv_ProcessingAttempt
+        actions: [Read]
+        depth: Organization
+      - entity: hsv_ServiceObject
+        actions: [Read]
+        depth: Organization
+      - entity: Account
+        actions: [Read]
+        depth: Organization
+      - entity: hsv_StatusTransition
+        actions: [Read]
+        depth: Organization
+
+  - name: HSV Plattformbetreuer
+    description: >
+      Bearbeitet die technische Fehlerqueue, stößt Wiederholungen an.
+      Dead-Letter-Queue, Protokoll, Konfiguration (docs/01-prozessbeschreibung.md §2).
+    privileges:
+      - entity: hsv_WorkOrder
+        actions: [Read]
+        depth: Organization
+      - entity: hsv_InboundMessage
+        actions: [Read, Write, Append, AppendTo]
+        depth: Organization
+      - entity: hsv_ProcessingAttempt
+        actions: [Read, Write, Append, AppendTo]
+        depth: Organization
+      - entity: hsv_ServiceObject
+        actions: [Read]
+        depth: Organization
+      - entity: Account
+        actions: [Read]
+        depth: Organization
+      - entity: hsv_StatusTransition
+        actions: [Create, Read, Write, Delete, Append, AppendTo]
+        depth: Organization
