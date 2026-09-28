@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<EntityRelationships xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <EntityRelationship Name="business_unit_hsv_workorder" />
+  <EntityRelationship Name="contact_hsv_workorder" />
+  <EntityRelationship Name="hsv_account_serviceobject" />
+  <EntityRelationship Name="hsv_account_workorder" />
+  <EntityRelationship Name="hsv_inboundmessage_duplicateof" />
+  <EntityRelationship Name="hsv_inboundmessage_processingattempt" />
+  <EntityRelationship Name="hsv_inboundmessage_sourcemessage" />
+  <EntityRelationship Name="hsv_processingattempt_previousattempt" />
+  <EntityRelationship Name="hsv_serviceobject_workorder" />
+  <EntityRelationship Name="hsv_systemuser_inboundmessage_decidedby" />
+  <EntityRelationship Name="hsv_workorder_inboundmessage" />
+  <EntityRelationship Name="lk_hsv_inboundmessage_createdby" />
+  <EntityRelationship Name="lk_hsv_inboundmessage_modifiedby" />
+  <EntityRelationship Name="lk_hsv_processingattempt_createdby" />
+  <EntityRelationship Name="lk_hsv_processingattempt_modifiedby" />
+  <EntityRelationship Name="lk_hsv_serviceobject_createdby" />
+  <EntityRelationship Name="lk_hsv_serviceobject_modifiedby" />
+  <EntityRelationship Name="lk_hsv_statustransition_createdby" />
+  <EntityRelationship Name="lk_hsv_statustransition_modifiedby" />
+  <EntityRelationship Name="lk_hsv_workorder_createdby" />
+  <EntityRelationship Name="lk_hsv_workorder_modifiedby" />
+  <EntityRelationship Name="organization_hsv_inboundmessage" />
+  <EntityRelationship Name="organization_hsv_processingattempt" />
+  <EntityRelationship Name="organization_hsv_serviceobject" />
+  <EntityRelationship Name="organization_hsv_statustransition" />
+  <EntityRelationship Name="owner_hsv_workorder" />
+  <EntityRelationship Name="team_hsv_workorder" />
+  <EntityRelationship Name="user_hsv_workorder" />
+</EntityRelationships>

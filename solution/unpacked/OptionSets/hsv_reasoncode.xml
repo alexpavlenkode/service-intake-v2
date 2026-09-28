@@ -1,0 +1,60 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<optionset Name="hsv_reasoncode" localizedName="Reason Code" description="Machine-readable reason codes shared between hsv_inboundmessage and hsv_processingattempt. Source: docs/03-datenmodell.md §5. If this list grows past ~30 values, replace it with a configuration table per the doc's own note - do not silently keep bolting values onto this set.&#xA;" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <OptionSetType>picklist</OptionSetType>
+  <IsGlobal>1</IsGlobal>
+  <IntroducedVersion>1.0.0.0</IntroducedVersion>
+  <IsCustomizable>1</IsCustomizable>
+  <displaynames>
+    <displayname description="Reason Code" languagecode="1031" />
+  </displaynames>
+  <Descriptions>
+    <Description description="Machine-readable reason codes shared between hsv_inboundmessage and hsv_processingattempt. Source: docs/03-datenmodell.md §5. If this list grows past ~30 values, replace it with a configuration table per the doc's own note - do not silently keep bolting values onto this set.&#xA;" languagecode="1031" />
+  </Descriptions>
+  <options>
+    <option value="209710401" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="MISSING_OBJECT_ADDRESS" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710402" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="UNKNOWN_CUSTOMER" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710403" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="NOT_A_REQUEST" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710404" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="POSSIBLE_DUPLICATE" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710405" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="HTTP_429" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710406" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="ERP_UNAVAILABLE" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710407" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="SCHEMA_MISMATCH" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710408" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="INVALID_TRANSITION" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710409" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="RETRY_BUDGET_EXCEEDED" languagecode="1031" />
+      </labels>
+    </option>
+  </options>
+</optionset>

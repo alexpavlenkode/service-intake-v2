@@ -33,13 +33,18 @@ powershell -File scripts\deploy.ps1 -DryRun
 # 4. Apply - only after reviewing the dry run and getting sign-off
 powershell -File scripts\deploy.ps1 -Apply
 
-# 5. Verify actual SI-DEV state against schema/*.yaml (Phase D)
+# 5. Verify actual SI-DEV state against schema/*.yaml
 powershell -File scripts\verify.ps1
 
-# 6. Export the solution once everything verifies (Phase D)
-pac solution export --path solution\HSVServiceIntakeV2.zip --name HSVServiceIntakeV2
-pac solution unpack --zipfile solution\HSVServiceIntakeV2.zip --folder solution\unpacked
+# 6. Idempotency integration test - report written to tests\idempotency-report.md
+powershell -File scripts\test-idempotency.ps1
+
+# 7. Export and unpack the solution once everything verifies
+pac solution export --name HSVServiceIntakeV2 --path solution\HSVServiceIntakeV2.zip --overwrite
+pac solution unpack --zipfile solution\HSVServiceIntakeV2.zip --folder solution\unpacked --packagetype Unmanaged --allowWrite true
 ```
+
+`deploy.ps1 -Apply` also accepts `-OnlyTables`, `-OnlyRelationships`, `-OnlyKeys` (arrays) to scope a run to specific components - useful for cautiously rolling out one risky change at a time. Pass arrays natively (`& .\scripts\deploy.ps1 -Apply -OnlyTables @('hsv_workorder')`) rather than through a nested `powershell -File` call with comma-separated values - the latter parses as a single string, not an array, and silently does nothing.
 
 ## Repository layout
 
@@ -67,7 +72,23 @@ service-intake-v2/
 
 ## Status
 
-**Phase A (discovery, YAML spec, dry run) complete.** See
-`docs/discovery-report.md` for the full inventory and
-`scripts/deploy.ps1 -DryRun` output for the plan. Phase B (publisher,
-solution, choices, tables) has not started — waiting on review of the above.
+**Phases A–D complete.** Publisher, solution, 7 global choices, 5 tables,
+10 relationships, 4 alternate keys (all `Active`), and table-level auditing
+on `hsv_workorder`/`hsv_inboundmessage` are live in SI-DEV.
+`scripts/verify.ps1` passes 86/87 checks — the one expected failure is
+organization-level auditing being off, which is an admin action outside this
+project's scope (Settings > Auditing) and is surfaced as
+`MANUAL DECISION REQUIRED`, not silently skipped.
+
+The idempotency integration test (`scripts/test-idempotency.ps1`,
+report in `tests/idempotency-report.md`) confirms the alternate key on
+`hsv_providermessageid` rejects a duplicate `POST` outright (HTTP 412,
+`error.code=0x80060892`) rather than relying on application-level
+check-then-create logic.
+
+The solution is exported and unpacked at `solution/HSVServiceIntakeV2.zip`
+/ `solution/unpacked/`.
+
+**Next phase (not started here):** Security Model — Security Roles for
+Disponent/Techniker/Auditor/Plattformbetreuer, the `CanTransition` validator
+for `hsv_statustransition`, and populating actual transition rows.

@@ -1,0 +1,70 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<optionset Name="hsv_messagestatus" localizedName="Message Status" description="Lifecycle status of an inbound message. Source: docs/01-prozessbeschreibung.md §5.1 and docs/03-datenmodell.md §3.3.&#xA;" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <OptionSetType>picklist</OptionSetType>
+  <IsGlobal>1</IsGlobal>
+  <IntroducedVersion>1.0.0.0</IntroducedVersion>
+  <IsCustomizable>1</IsCustomizable>
+  <displaynames>
+    <displayname description="Message Status" languagecode="1031" />
+  </displaynames>
+  <Descriptions>
+    <Description description="Lifecycle status of an inbound message. Source: docs/01-prozessbeschreibung.md §5.1 and docs/03-datenmodell.md §3.3.&#xA;" languagecode="1031" />
+  </Descriptions>
+  <options>
+    <option value="209710001" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Received" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710002" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Parsed" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710003" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Validated" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710004" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Needs Clarification" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710005" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Potential Duplicate" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710006" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Duplicate" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710007" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Not Relevant" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710008" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Linked" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710009" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Converted" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710010" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Technical Retry" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710011" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Failed" languagecode="1031" />
+      </labels>
+    </option>
+  </options>
+</optionset>

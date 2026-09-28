@@ -1,0 +1,40 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<optionset Name="hsv_trade" localizedName="Trade" description="Gewerk / craft classification of a work order." xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <OptionSetType>picklist</OptionSetType>
+  <IsGlobal>1</IsGlobal>
+  <IntroducedVersion>1.0.0.0</IntroducedVersion>
+  <IsCustomizable>1</IsCustomizable>
+  <displaynames>
+    <displayname description="Trade" languagecode="1031" />
+  </displaynames>
+  <Descriptions>
+    <Description description="Gewerk / craft classification of a work order." languagecode="1031" />
+  </Descriptions>
+  <options>
+    <option value="209710501" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Sanitär" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710502" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Elektro" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710503" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Heizung" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710504" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Schlie�Yanlage" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710505" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Sonstiges" languagecode="1031" />
+      </labels>
+    </option>
+  </options>
+</optionset>

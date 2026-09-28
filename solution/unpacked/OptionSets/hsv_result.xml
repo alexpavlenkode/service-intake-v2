@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<optionset Name="hsv_result" localizedName="Processing Result" description="Outcome of a single processing attempt/stage." xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <OptionSetType>picklist</OptionSetType>
+  <IsGlobal>1</IsGlobal>
+  <IntroducedVersion>1.0.0.0</IntroducedVersion>
+  <IsCustomizable>1</IsCustomizable>
+  <displaynames>
+    <displayname description="Processing Result" languagecode="1031" />
+  </displaynames>
+  <Descriptions>
+    <Description description="Outcome of a single processing attempt/stage." languagecode="1031" />
+  </Descriptions>
+  <options>
+    <option value="209710301" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Success" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710302" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Business Exception" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710303" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Technical Failure" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710304" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Skipped" languagecode="1031" />
+      </labels>
+    </option>
+  </options>
+</optionset>

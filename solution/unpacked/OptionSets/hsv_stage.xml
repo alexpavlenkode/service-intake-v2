@@ -1,0 +1,50 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<optionset Name="hsv_stage" localizedName="Processing Stage" description="Which stage of message processing a hsv_processingattempt row records. Source: docs/03-datenmodell.md §3.4 / docs/01-prozessbeschreibung.md §8.&#xA;" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <OptionSetType>picklist</OptionSetType>
+  <IsGlobal>1</IsGlobal>
+  <IntroducedVersion>1.0.0.0</IntroducedVersion>
+  <IsCustomizable>1</IsCustomizable>
+  <displaynames>
+    <displayname description="Processing Stage" languagecode="1031" />
+  </displaynames>
+  <Descriptions>
+    <Description description="Which stage of message processing a hsv_processingattempt row records. Source: docs/03-datenmodell.md §3.4 / docs/01-prozessbeschreibung.md §8.&#xA;" languagecode="1031" />
+  </Descriptions>
+  <options>
+    <option value="209710201" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Ingest" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710202" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Parse" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710203" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Validate" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710204" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Duplicate Check" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710205" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Create" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710206" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="ERP" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710207" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Notify" languagecode="1031" />
+      </labels>
+    </option>
+  </options>
+</optionset>

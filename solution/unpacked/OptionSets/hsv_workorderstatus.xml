@@ -1,0 +1,40 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<optionset Name="hsv_workorderstatus" localizedName="Work Order Status" description="Lifecycle status of a work order. Source: docs/01-prozessbeschreibung.md §5.2. Deliberately a Choice column, not statecode - statecode stays reserved for Active/Inactive (docs/03-datenmodell.md §3.2).&#xA;" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <OptionSetType>picklist</OptionSetType>
+  <IsGlobal>1</IsGlobal>
+  <IntroducedVersion>1.0.0.0</IntroducedVersion>
+  <IsCustomizable>1</IsCustomizable>
+  <displaynames>
+    <displayname description="Work Order Status" languagecode="1031" />
+  </displaynames>
+  <Descriptions>
+    <Description description="Lifecycle status of a work order. Source: docs/01-prozessbeschreibung.md §5.2. Deliberately a Choice column, not statecode - statecode stays reserved for Active/Inactive (docs/03-datenmodell.md §3.2).&#xA;" languagecode="1031" />
+  </Descriptions>
+  <options>
+    <option value="209710101" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Neu" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710102" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Zugewiesen" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710103" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="In Arbeit" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710104" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Abgeschlossen" languagecode="1031" />
+      </labels>
+    </option>
+    <option value="209710105" ExternalValue="" IsHidden="0">
+      <labels>
+        <label description="Storniert" languagecode="1031" />
+      </labels>
+    </option>
+  </options>
+</optionset>

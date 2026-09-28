@@ -101,8 +101,37 @@ code instead of an inconsistent per-flow error message.
   system/audit-relevant timestamps to `TimeZoneIndependent` and the one
   human-facing appointment field (`hsv_workorder.hsv_DueDate`) to
   `UserLocal` — flagged at the top of that file, confirm before Phase B.
-- **Organization-level auditing is currently OFF in SI-DEV.** Table-level
-  auditing on `hsv_workorder`/`hsv_inboundmessage` (Phase C) will silently do
-  nothing until an admin turns this on tenant-wide — `deploy.ps1 -DryRun`
-  already surfaces this as `MANUAL DECISION REQUIRED`, not a warning that's
-  easy to miss.
+- **Organization-level auditing is still OFF in SI-DEV** after Phase C.
+  Table-level auditing on `hsv_workorder`/`hsv_inboundmessage` is enabled and
+  confirmed via `verify.ps1`, but has no real effect until an admin turns on
+  auditing tenant-wide (Settings > Auditing) — `deploy.ps1` and `verify.ps1`
+  both surface this as `MANUAL DECISION REQUIRED` / `[FAIL]` respectively, on
+  purpose, rather than treating it as passing.
+
+## Web API quirks found while applying Phases B–C (undocumented anywhere
+obvious - recorded here so nobody re-discovers them the hard way)
+
+- Relationship `SchemaName` must start with the solution's own publisher
+  prefix even when one side of the relationship is a standard entity
+  (e.g. `systemuser` → `hsv_inboundmessage`). `systemuser_hsv_inboundmessage_decidedby`
+  was rejected (HTTP 400, code `0x80044366`); renamed to
+  `hsv_systemuser_inboundmessage_decidedby`.
+- `EntityDefinitions?$filter=startswith(LogicalName,'hsv_')` and similar
+  metadata-collection filters return HTTP 501 - the metadata OData endpoints
+  don't support `startswith()`/`$filter` the way normal entity sets do.
+  Fetch the full collection and filter client-side instead (also true for
+  `Keys(SchemaName='...')` addressing, which 400s - list and filter instead
+  of addressing by key).
+- Creating an `EntityKeyMetadata` (alternate key) needs an explicit
+  `DisplayName`, not just `SchemaName`/`KeyAttributes` - omitting it fails
+  with a cryptic "Entity Key display name ... not specified" (code
+  `0x80040203`).
+- Enabling a managed boolean property on `EntityMetadata` (e.g.
+  `IsAuditEnabled`) returns HTTP 405 ("Operation not supported on
+  EntityMetadata") via `PATCH` to the whole resource in this environment.
+  `PUT` to the same resource works. `PATCH` still works fine for other
+  metadata updates (labels, etc.) - this quirk seems specific to managed
+  property updates on the entity root.
+- The duplicate-key rejection for `hsv_providermessageid` comes back as
+  **HTTP 412** (Precondition Failed) with `error.code = 0x80060892`, not the
+  400 one might expect - confirmed by `scripts/test-idempotency.ps1`.
