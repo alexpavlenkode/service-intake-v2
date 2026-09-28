@@ -27,6 +27,7 @@ $choicesSpec  = Read-Yaml 'choices.yaml'
 $keysSpec     = Read-Yaml 'keys.yaml'
 $auditingSpec = Read-Yaml 'auditing.yaml'
 $relSpec      = Read-Yaml 'relationships.yaml'
+$securitySpec = Read-Yaml 'security.yaml'
 
 $failures = New-Object System.Collections.Generic.List[string]
 function Test-Check($description, [scriptblock] $check) {
@@ -144,6 +145,27 @@ foreach ($key in $keysSpec.keys) {
 Test-Check "hsv_businesskeyhash is NOT part of any alternate key on hsv_inboundmessage" {
     $keys = (Invoke-DataverseApi -OrgUrl $org -Method GET -Path "EntityDefinitions(LogicalName='hsv_inboundmessage')/Keys?`$select=SchemaName,KeyAttributes").value
     -not ($keys | Where-Object { $_.KeyAttributes -contains 'hsv_businesskeyhash' })
+}
+
+# --- Security roles (Security Model phase) -------------------------------
+foreach ($role in $securitySpec.roles) {
+    $expectedCount = ($role.privileges | ForEach-Object { $_.actions.Count } | Measure-Object -Sum).Sum
+    Test-Check "Role '$($role.name)' exists with all $expectedCount domain privileges" {
+        $r = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "roles?`$select=roleid&`$filter=name eq '$($role.name)'"
+        if ($r.value.Count -ne 1) { return $false }
+        $detail = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "roles($($r.value[0].roleid))?`$select=name&`$expand=roleprivileges_association(`$select=name)"
+        $expectedNames = @()
+        foreach ($grant in $role.privileges) {
+            foreach ($action in $grant.actions) { $expectedNames += "prv$action$($grant.entity)" }
+        }
+        $actualNames = @($detail.roleprivileges_association.name)
+        $missing = @($expectedNames | Where-Object { $_ -notin $actualNames })
+        $missing.Count -eq 0
+    }
+}
+Test-Check "Pre-existing V1 role 'SI Auditor' is untouched (still exists, distinct from our roles)" {
+    $v1 = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "roles?`$select=name&`$filter=name eq 'SI Auditor'"
+    $v1.value.Count -eq 1
 }
 
 # --- Status transition configuration data (Security Model phase) --------

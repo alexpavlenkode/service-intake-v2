@@ -20,3 +20,6 @@ solution/*.zip
 .vscode/
 *.user
 Thumbs.db
+
+# Local Claude Code permission overrides - machine-specific, not shared
+.claude/settings.local.json
