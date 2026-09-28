@@ -146,6 +146,14 @@ Test-Check "hsv_businesskeyhash is NOT part of any alternate key on hsv_inboundm
     -not ($keys | Where-Object { $_.KeyAttributes -contains 'hsv_businesskeyhash' })
 }
 
+# --- Status transition configuration data (Security Model phase) --------
+$transitionSpec = Read-Yaml 'statustransitions.yaml'
+$expectedTransitionCount = $transitionSpec.messageTransitions.Count + $transitionSpec.workOrderTransitions.Count
+Test-Check "hsv_statustransition has all $expectedTransitionCount configured rows" {
+    $rows = (Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_statustransitions?`$select=hsv_statustransitionid").value
+    $rows.Count -eq $expectedTransitionCount
+}
+
 Write-Output ''
 if ($failures.Count -eq 0) {
     Write-Output '=== ALL CHECKS PASSED ==='
