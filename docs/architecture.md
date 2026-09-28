@@ -135,3 +135,27 @@ obvious - recorded here so nobody re-discovers them the hard way)
 - The duplicate-key rejection for `hsv_providermessageid` comes back as
   **HTTP 412** (Precondition Failed) with `error.code = 0x80060892`, not the
   400 one might expect - confirmed by `scripts/test-idempotency.ps1`.
+
+## Web API / platform quirks found while working on the Security Model
+
+- The `role`↔`privilege` many-to-many relationship isn't exposed as a
+  top-level entity set (`roleprivileges` 404s). The real navigation property,
+  found via `EntityDefinitions(LogicalName='role')/ManyToManyRelationships`,
+  is `roleprivileges_association` - use
+  `roles(id)?$expand=roleprivileges_association($select=name)` to read a
+  role's actual privileges.
+- `Microsoft.Dynamics.CRM.AddPrivilegesRole`'s `Depth` field is the **string**
+  enum (`Basic`/`Local`/`Deep`/`Global`), not the numeric 1-4 shown in most
+  human-facing docs/UI tooltips - a numeric value fails with an OData
+  deserialization error ("Cannot read the value '1' as a quoted JSON string
+  value").
+- Every newly created custom Security Role starts with roughly 9 default
+  privileges of its own (SharePoint integration, SDK message/plugin read,
+  etc.), unrelated to anything you asked for. Don't use "role has privileges
+  > 0" as an idempotency check for "did I already assign my own grants" -
+  check for one of your own specific privilege names instead.
+- Assigning privileges to a role is treated by Claude Code's own auto-mode
+  safety classifier as a permission-grant action requiring explicit human
+  sign-off in the app's settings - it's not something this assistant can
+  approve for itself, even at the user's direct request relayed through
+  chat. See README's Security Model section for the current state.
