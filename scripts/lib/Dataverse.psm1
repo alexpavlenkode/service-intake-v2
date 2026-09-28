@@ -58,6 +58,8 @@ function Invoke-DataverseApi {
           - bearer auth via Get-DataverseToken
           - required OData headers
           - optional MSCRM.SolutionUniqueName / MSCRM.MergeLabels headers
+          - optional CallerObjectId header for impersonation (requires the
+            calling user to hold "Act on Behalf of Another User")
           - bounded retry on HTTP 429 honoring Retry-After
 
         -Path is relative to /api/data/v9.2/, e.g. "solutions" or
@@ -70,6 +72,7 @@ function Invoke-DataverseApi {
         [object] $Body,
         [string] $SolutionUniqueName,
         [switch] $MergeLabels,
+        [string] $CallerObjectId,
         [hashtable] $AdditionalHeaders,
         [int] $MaxRetries = 4
     )
@@ -88,6 +91,7 @@ function Invoke-DataverseApi {
     }
     if ($SolutionUniqueName) { $headers['MSCRM.SolutionUniqueName'] = $SolutionUniqueName }
     if ($MergeLabels)        { $headers['MSCRM.MergeLabels'] = 'true' }
+    if ($CallerObjectId)     { $headers['CallerObjectId'] = $CallerObjectId }
     if ($AdditionalHeaders)  { foreach ($k in $AdditionalHeaders.Keys) { $headers[$k] = $AdditionalHeaders[$k] } }
 
     $attempt = 0
