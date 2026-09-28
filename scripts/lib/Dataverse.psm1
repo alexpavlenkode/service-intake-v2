@@ -145,4 +145,33 @@ function Get-DataverseBaseLanguageCode {
     return $orgs.value[0].languagecode
 }
 
-Export-ModuleMember -Function Connect-DataverseOrg, Get-DataverseToken, Invoke-DataverseApi, Get-DataverseBaseLanguageCode
+function New-DataverseLabel {
+    param([Parameter(Mandatory)] [string] $Text, [Parameter(Mandatory)] [int] $LanguageCode)
+    return @{
+        '@odata.type'     = 'Microsoft.Dynamics.CRM.Label'
+        LocalizedLabels   = @(@{ '@odata.type' = 'Microsoft.Dynamics.CRM.LocalizedLabel'; Label = $Text; LanguageCode = $LanguageCode })
+    }
+}
+
+function New-DataverseRequiredLevel {
+    # Maps schema/tables.yaml's requiredLevel ("Required"/"None") to Dataverse's enum.
+    param([Parameter(Mandatory)] [string] $Level)
+    $value = if ($Level -eq 'Required') { 'ApplicationRequired' } else { 'None' }
+    return @{
+        '@odata.type' = 'Microsoft.Dynamics.CRM.AttributeRequiredLevelManagedProperty'
+        Value         = $value
+        CanBeChanged  = $true
+        ManagedPropertyLogicalName = 'canmodifyrequirementlevelsettings'
+    }
+}
+
+function ConvertTo-DataverseDisplayName {
+    # "ObjectNumber" -> "Object Number". Schema names in tables.yaml carry no
+    # separate display name, so we derive a readable one deterministically
+    # rather than inventing prose per column.
+    param([Parameter(Mandatory)] [string] $SchemaName, [string] $Prefix = 'hsv_')
+    $bare = $SchemaName -replace "^$Prefix", ''
+    return ($bare -creplace '([a-z0-9])([A-Z])', '$1 $2')
+}
+
+Export-ModuleMember -Function Connect-DataverseOrg, Get-DataverseToken, Invoke-DataverseApi, Get-DataverseBaseLanguageCode, New-DataverseLabel, New-DataverseRequiredLevel, ConvertTo-DataverseDisplayName

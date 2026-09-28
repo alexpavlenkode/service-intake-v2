@@ -35,7 +35,13 @@ param(
     [switch] $DryRun,
 
     [Parameter(ParameterSetName = 'Apply')]
-    [switch] $Apply
+    [switch] $Apply,
+
+    # Optional scoping for cautious incremental applies (e.g. create just one
+    # table, verify it by hand, then widen). Omit to process all tables in
+    # schema/tables.yaml. Never affects publisher/solution/choices - those
+    # are cheap to verify and low-risk to create all at once.
+    [string[]] $OnlyTables
 )
 
 $ErrorActionPreference = 'Stop'
@@ -153,18 +159,161 @@ foreach ($choice in $choices.globalChoices) {
 $allEntities = Invoke-DataverseApi -OrgUrl $org -Method GET -Path 'EntityDefinitions?$select=LogicalName'
 $existingLogicalNames = @($allEntities.value.LogicalName)
 
-foreach ($table in $tablesSpec.tables) {
+function New-DataverseAttributeBody {
+    # Builds the Attributes-endpoint POST body for one non-Lookup column.
+    # Lookup columns are NOT built here - in Dataverse a Lookup attribute is
+    # created together with its OneToMany relationship, so those are created
+    # in Phase C (schema/relationships.yaml), not here.
+    param($col, [int] $LangCode, [hashtable] $GlobalChoiceIds)
+
+    $displayName = New-DataverseLabel (ConvertTo-DataverseDisplayName $col.schemaName) $LangCode
+    $required = New-DataverseRequiredLevel $col.requiredLevel
+
+    switch ($col.type) {
+        'String' {
+            return @{
+                '@odata.type' = 'Microsoft.Dynamics.CRM.StringAttributeMetadata'
+                SchemaName    = $col.schemaName
+                DisplayName   = $displayName
+                RequiredLevel = $required
+                MaxLength     = [int]$col.maxLength
+                FormatName    = @{ Value = 'Text' }
+            }
+        }
+        'Memo' {
+            return @{
+                '@odata.type' = 'Microsoft.Dynamics.CRM.MemoAttributeMetadata'
+                SchemaName    = $col.schemaName
+                DisplayName   = $displayName
+                RequiredLevel = $required
+                MaxLength     = [int]$col.maxLength
+            }
+        }
+        'Boolean' {
+            return @{
+                '@odata.type' = 'Microsoft.Dynamics.CRM.BooleanAttributeMetadata'
+                SchemaName    = $col.schemaName
+                DisplayName   = $displayName
+                RequiredLevel = $required
+                DefaultValue  = [bool]$col.defaultValue
+                OptionSet     = @{
+                    '@odata.type' = 'Microsoft.Dynamics.CRM.BooleanOptionSetMetadata'
+                    TrueOption    = @{ Value = 1; Label = (New-DataverseLabel 'Ja' $LangCode) }
+                    FalseOption   = @{ Value = 0; Label = (New-DataverseLabel 'Nein' $LangCode) }
+                }
+            }
+        }
+        'WholeNumber' {
+            return @{
+                '@odata.type' = 'Microsoft.Dynamics.CRM.IntegerAttributeMetadata'
+                SchemaName    = $col.schemaName
+                DisplayName   = $displayName
+                RequiredLevel = $required
+                Format        = 'None'
+                MinValue      = -2147483648
+                MaxValue      = 2147483647
+            }
+        }
+        'DateTime' {
+            return @{
+                '@odata.type'    = 'Microsoft.Dynamics.CRM.DateTimeAttributeMetadata'
+                SchemaName       = $col.schemaName
+                DisplayName      = $displayName
+                RequiredLevel    = $required
+                Format           = 'DateAndTime'
+                DateTimeBehavior = @{ Value = $col.dateTimeBehavior }
+            }
+        }
+        'Choice' {
+            if ($col.globalChoice) {
+                $metadataId = $GlobalChoiceIds[$col.globalChoice]
+                if (-not $metadataId) { throw "Global choice '$($col.globalChoice)' not found - create choices before tables." }
+                return @{
+                    '@odata.type'  = 'Microsoft.Dynamics.CRM.PicklistAttributeMetadata'
+                    SchemaName     = $col.schemaName
+                    DisplayName    = $displayName
+                    RequiredLevel  = $required
+                    GlobalOptionSet = @{ MetadataId = $metadataId }
+                }
+            } elseif ($col.localOptions) {
+                $opts = $script:tablesSpec.localOptionSets[$col.localOptions]
+                return @{
+                    '@odata.type' = 'Microsoft.Dynamics.CRM.PicklistAttributeMetadata'
+                    SchemaName    = $col.schemaName
+                    DisplayName   = $displayName
+                    RequiredLevel = $required
+                    OptionSet     = @{
+                        '@odata.type'  = 'Microsoft.Dynamics.CRM.OptionSetMetadata'
+                        IsGlobal       = $false
+                        OptionSetType  = 'Picklist'
+                        Options        = @($opts | ForEach-Object { @{ Value = $_.value; Label = (New-DataverseLabel $_.label $LangCode) } })
+                    }
+                }
+            } else {
+                throw "Choice column '$($col.schemaName)' has neither globalChoice nor localOptions set."
+            }
+        }
+        default { return $null } # Lookup, AutoNumber-as-primary handled elsewhere
+    }
+}
+
+$script:tablesSpec = $tablesSpec
+
+# Resolve global choice MetadataIds once, needed for Picklist columns below.
+$globalChoiceMeta = Invoke-DataverseApi -OrgUrl $org -Method GET -Path 'GlobalOptionSetDefinitions?$select=Name,MetadataId'
+$globalChoiceIds = @{}
+foreach ($g in $globalChoiceMeta.value) { $globalChoiceIds[$g.Name] = $g.MetadataId }
+
+$tablesToProcess = $tablesSpec.tables
+if ($OnlyTables) { $tablesToProcess = $tablesSpec.tables | Where-Object { $_.logicalName -in $OnlyTables } }
+
+foreach ($table in $tablesToProcess) {
     if ($table.logicalName -in $existingLogicalNames) {
         Add-PlanItem 'Table' $table.logicalName 'VERIFY' 'already exists - column-level diff not checked by this pass, see verify.ps1'
         continue
     }
-    Add-PlanItem 'Table' $table.logicalName 'CREATE' "$($table.columns.Count) columns, ownership=$($table.ownershipType)"
+
+    $nonLookupCols = @($table.columns | Where-Object { $_.type -ne 'Lookup' })
+    $lookupCols    = @($table.columns | Where-Object { $_.type -eq 'Lookup' })
+    Add-PlanItem 'Table' $table.logicalName 'CREATE' "$($nonLookupCols.Count) columns now, $($lookupCols.Count) Lookup column(s) deferred to Phase C (relationships), ownership=$($table.ownershipType)"
+
     if ($Apply) {
-        # Full EntityDefinitions + Attributes POST sequence intentionally
-        # deferred to Phase B implementation work - not built out here since
-        # Phase A must not write to SI-DEV under any parameter combination
-        # exercised so far. Wire this up when Phase B is approved.
-        throw "Table creation for '$($table.logicalName)' is not yet implemented. Phase A explicitly stops before any component is created - see docs/discovery-report.md."
+        $primary = $table.primaryNameAttribute
+        $primaryAttr = @{
+            '@odata.type' = 'Microsoft.Dynamics.CRM.StringAttributeMetadata'
+            SchemaName    = $primary.schemaName
+            DisplayName   = New-DataverseLabel $primary.displayName $script:baseLangCode
+            RequiredLevel = New-DataverseRequiredLevel 'Required'
+            MaxLength     = if ($primary.maxLength) { [int]$primary.maxLength } else { 100 }
+            FormatName    = @{ Value = 'Text' }
+            IsPrimaryName = $true
+        }
+        if ($primary.type -eq 'AutoNumber') {
+            $primaryAttr['AutoNumberFormat'] = $primary.autoNumberFormat
+        }
+
+        $attributes = New-Object System.Collections.Generic.List[object]
+        $attributes.Add($primaryAttr) | Out-Null
+        foreach ($col in $nonLookupCols) {
+            $body = New-DataverseAttributeBody -col $col -LangCode $script:baseLangCode -GlobalChoiceIds $globalChoiceIds
+            if ($body) { $attributes.Add($body) | Out-Null }
+        }
+
+        $entityBody = @{
+            '@odata.type'          = 'Microsoft.Dynamics.CRM.EntityMetadata'
+            SchemaName             = $table.schemaName
+            DisplayName            = New-DataverseLabel $table.displayName $script:baseLangCode
+            DisplayCollectionName  = New-DataverseLabel $table.pluralDisplayName $script:baseLangCode
+            Description            = New-DataverseLabel $table.description $script:baseLangCode
+            OwnershipType          = $table.ownershipType
+            HasActivities          = $false
+            HasNotes               = $false
+            IsActivity             = $false
+            Attributes             = $attributes
+        }
+
+        Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'EntityDefinitions' -Body $entityBody -SolutionUniqueName $config.SolutionUniqueName | Out-Null
+        Write-Output "[CREATE] Table '$($table.logicalName)' created with $($attributes.Count) attributes (incl. primary name)."
     }
 }
 
