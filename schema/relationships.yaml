@@ -1,0 +1,98 @@
+# Relationships for Service Intake V2.
+# Source: docs/03-datenmodell.md §4. Cardinality and delete behavior are
+# copied verbatim from that table - do not infer defaults.
+# Note: lookup columns already declared in tables.yaml (e.g. hsv_workorder.hsv_Account)
+# are the "N" side of these relationships; this file is the authoritative
+# cascade-configuration spec deploy.ps1 uses when creating them.
+
+relationships:
+
+  - schemaName: hsv_account_serviceobject
+    referencedEntity: account
+    referencingEntity: hsv_serviceobject
+    referencingAttribute: hsv_Account
+    type: OneToMany
+    cascadeConfiguration:
+      assign: NoCascade
+      delete: RemoveLink   # "Restrict" in Dataverse terms is Referential (block delete while children exist)
+      merge: NoCascade
+      reparent: NoCascade
+      share: NoCascade
+      unshare: NoCascade
+    deleteBehavior: Restrict
+    note: Restrict statt Cascade ist Absicht - ein gelöschter Kunde darf keine Auftragshistorie mitreißen.
+
+  - schemaName: hsv_account_workorder
+    referencedEntity: account
+    referencingEntity: hsv_workorder
+    referencingAttribute: hsv_Account
+    type: OneToMany
+    deleteBehavior: Restrict
+
+  - schemaName: hsv_serviceobject_workorder
+    referencedEntity: hsv_serviceobject
+    referencingEntity: hsv_workorder
+    referencingAttribute: hsv_ServiceObject
+    type: OneToMany
+    deleteBehavior: Restrict
+
+  - schemaName: contact_hsv_workorder
+    referencedEntity: contact
+    referencingEntity: hsv_workorder
+    referencingAttribute: hsv_Contact
+    type: OneToMany
+    deleteBehavior: RemoveLink
+
+  - schemaName: hsv_workorder_inboundmessage
+    referencedEntity: hsv_workorder
+    referencingEntity: hsv_inboundmessage
+    referencingAttribute: hsv_WorkOrder
+    type: OneToMany
+    deleteBehavior: RemoveLink
+
+  - schemaName: hsv_inboundmessage_duplicateof
+    referencedEntity: hsv_inboundmessage
+    referencingEntity: hsv_inboundmessage
+    referencingAttribute: hsv_DuplicateOf
+    type: OneToMany
+    selfReferencing: true
+    deleteBehavior: RemoveLink
+
+  - schemaName: hsv_inboundmessage_processingattempt
+    referencedEntity: hsv_inboundmessage
+    referencingEntity: hsv_processingattempt
+    referencingAttribute: hsv_InboundMessage
+    type: OneToMany
+    deleteBehavior: Parental
+    note: >
+      Parental/Cascade per docs/03-datenmodell.md §3.4 and §4 - deletes and
+      sharing on the message cascade to its processing attempts. This is the
+      one relationship in this schema that is NOT Restrict; it's intentional.
+
+  - schemaName: hsv_processingattempt_previousattempt
+    referencedEntity: hsv_processingattempt
+    referencingEntity: hsv_processingattempt
+    referencingAttribute: hsv_PreviousAttempt
+    type: OneToMany
+    selfReferencing: true
+    deleteBehavior: RemoveLink
+
+  - schemaName: hsv_inboundmessage_sourcemessage
+    referencedEntity: hsv_inboundmessage
+    referencingEntity: hsv_workorder
+    referencingAttribute: hsv_SourceMessage
+    type: OneToMany
+    deleteBehavior: RemoveLink
+    note: >
+      Not explicitly in docs/03-datenmodell.md §4's relationship table, but
+      required by the hsv_workorder.hsv_SourceMessage lookup declared in
+      §3.2/tables.yaml. RemoveLink chosen for consistency with the sibling
+      hsv_workorder<->hsv_inboundmessage relationship; flag if a stricter
+      behavior is actually wanted.
+
+  - schemaName: systemuser_hsv_inboundmessage_decidedby
+    referencedEntity: systemuser
+    referencingEntity: hsv_inboundmessage
+    referencingAttribute: hsv_DecidedBy
+    type: OneToMany
+    deleteBehavior: RemoveLink

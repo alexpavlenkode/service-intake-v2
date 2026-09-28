@@ -1,0 +1,22 @@
+# Secrets / tokens — never committed, only ever held in process memory
+*.env
+.env.*
+**/*token*.json
+**/*.secrets.json
+
+# PAC CLI / Azure auth profiles and caches
+**/pac-auth-cache/
+.pac/
+.azure/
+
+# Logs — may contain request metadata, kept local only
+logs/*
+!logs/.gitkeep
+
+# Solution export artifacts are tracked selectively; ignore transient zips
+solution/*.zip
+
+# Local editor / OS noise
+.vscode/
+*.user
+Thumbs.db

@@ -1,0 +1,34 @@
+# Auditing for Service Intake V2.
+# Source: docs/03-datenmodell.md §6 ("Auditing wird für hsv_workorder und
+# hsv_inboundmessage aktiviert, insbesondere für die Statusspalten und den
+# Owner.")
+#
+# IMPORTANT (Promt §6 / this file's own reason for existing): table-level
+# auditing has no effect unless organization-level auditing is also on.
+# deploy.ps1 must check organization.isauditenabled and FAIL LOUDLY (not warn)
+# if it's off before it enables table auditing that would silently do nothing.
+
+organizationAuditingRequired: true
+
+tables:
+  - entity: hsv_workorder
+    auditingEnabled: true
+    emphasizedAttributes:
+      - hsv_Status
+      - ownerid
+    reason: Statusübergänge und Owner-Wechsel (= Zuweisung) müssen nachvollziehbar sein.
+
+  - entity: hsv_inboundmessage
+    auditingEnabled: true
+    emphasizedAttributes:
+      - hsv_Status
+      - hsv_DuplicateDecision
+    reason: Statusverlauf und Dublettenentscheidungen müssen nachvollziehbar sein.
+
+notAudited:
+  - entity: hsv_serviceobject
+    reason: Stammdaten, keine zeilenbasierte Trennung, kein Statusverlauf.
+  - entity: hsv_processingattempt
+    reason: Ist selbst schon Bewegungsdaten/Protokoll - Auditing darauf wäre ein Log über ein Log.
+  - entity: hsv_statustransition
+    reason: Konfigurationstabelle; Änderungen daran sind selten und gehen ohnehin durch Solution-Deployment.

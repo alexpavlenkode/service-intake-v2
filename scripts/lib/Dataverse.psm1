@@ -1,0 +1,148 @@
+﻿<#
+    Dataverse Web API helpers for Service Intake V2.
+
+    Auth method (see docs/deployment.md for the full story):
+    Az.Accounts, interactive browser login (NOT device code — device code
+    flow is blocked by this tenant's Conditional Access / Security Defaults,
+    confirmed via AADSTS530035). WAM is disabled per-process to avoid a
+    separate WAM-related failure mode seen during setup.
+
+    The access token is never written to disk, .env, git, or logs. Only its
+    expiry and audience may be logged.
+#>
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+function Connect-DataverseOrg {
+    <#
+        Ensures there is a live Az.Accounts session. Safe to call repeatedly;
+        does nothing if already connected. Uses interactive browser auth,
+        never -UseDeviceAuthentication.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $TenantId
+    )
+
+    Import-Module Az.Accounts -ErrorAction Stop
+
+    $ctx = Get-AzContext -ErrorAction SilentlyContinue
+    if (-not $ctx) {
+        Update-AzConfig -EnableLoginByWam $false -Scope Process | Out-Null
+        Connect-AzAccount -Tenant $TenantId -ErrorAction Stop | Out-Null
+    }
+}
+
+function Get-DataverseToken {
+    <#
+        Returns a plain-string access token scoped to the given Dataverse
+        organization URL. Caller must not persist this value.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $OrgUrl
+    )
+
+    $tok = Get-AzAccessToken -ResourceUrl $OrgUrl -ErrorAction Stop
+    $token = $tok.Token
+    if ($token -is [System.Security.SecureString]) {
+        $token = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+            [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($token)
+        )
+    }
+    return $token
+}
+
+function Invoke-DataverseApi {
+    <#
+        Thin wrapper around the Dataverse Web API (v9.2) with:
+          - bearer auth via Get-DataverseToken
+          - required OData headers
+          - optional MSCRM.SolutionUniqueName / MSCRM.MergeLabels headers
+          - bounded retry on HTTP 429 honoring Retry-After
+
+        -Path is relative to /api/data/v9.2/, e.g. "solutions" or
+        "EntityDefinitions(LogicalName='hsv_workorder')/Attributes".
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $OrgUrl,
+        [Parameter(Mandatory)] [ValidateSet('GET','POST','PATCH','DELETE')] [string] $Method,
+        [Parameter(Mandatory)] [string] $Path,
+        [object] $Body,
+        [string] $SolutionUniqueName,
+        [switch] $MergeLabels,
+        [hashtable] $AdditionalHeaders,
+        [int] $MaxRetries = 4
+    )
+
+    if ($Method -eq 'DELETE' -and $Path -match '(EntityDefinitions|Attributes|Keys|RelationshipDefinitions|GlobalOptionSetDefinitions)') {
+        throw "Refusing DELETE against a metadata endpoint ('$Path'). This is a hard rule for this project, not a configurable option."
+    }
+
+    $uri = "$OrgUrl/api/data/v9.2/$Path"
+
+    $headers = @{
+        'OData-MaxVersion' = '4.0'
+        'OData-Version'    = '4.0'
+        'Accept'           = 'application/json'
+        'Content-Type'     = 'application/json; charset=utf-8'
+    }
+    if ($SolutionUniqueName) { $headers['MSCRM.SolutionUniqueName'] = $SolutionUniqueName }
+    if ($MergeLabels)        { $headers['MSCRM.MergeLabels'] = 'true' }
+    if ($AdditionalHeaders)  { foreach ($k in $AdditionalHeaders.Keys) { $headers[$k] = $AdditionalHeaders[$k] } }
+
+    $attempt = 0
+    while ($true) {
+        $attempt++
+        $headers['Authorization'] = "Bearer $(Get-DataverseToken -OrgUrl $OrgUrl)"
+        try {
+            $params = @{
+                Uri             = $uri
+                Method          = $Method
+                Headers         = $headers
+                UseBasicParsing = $true
+            }
+            if ($null -ne $Body) {
+                $params['Body'] = ($Body | ConvertTo-Json -Depth 20 -Compress)
+            }
+            $resp = Invoke-WebRequest @params
+            if ($resp.Content) {
+                return $resp.Content | ConvertFrom-Json
+            }
+            return $null
+        }
+        catch {
+            $we = $_.Exception
+            $status = $null
+            if ($we.Response) { $status = [int]$we.Response.StatusCode }
+
+            if ($status -eq 429 -and $attempt -le $MaxRetries) {
+                $retryAfter = 5
+                if ($we.Response.Headers -and $we.Response.Headers['Retry-After']) {
+                    $retryAfter = [int]$we.Response.Headers['Retry-After']
+                }
+                Write-Warning "[WARNING] 429 from Dataverse, retrying in ${retryAfter}s (attempt $attempt/$MaxRetries)"
+                Start-Sleep -Seconds $retryAfter
+                continue
+            }
+
+            $bodyText = $null
+            try {
+                $stream = $we.Response.GetResponseStream()
+                $reader = New-Object System.IO.StreamReader($stream)
+                $bodyText = $reader.ReadToEnd()
+            } catch {}
+
+            $msg = "Dataverse API call failed: $Method $uri (HTTP $status)"
+            if ($bodyText) { $msg += "`n$bodyText" }
+            throw $msg
+        }
+    }
+}
+
+function Get-DataverseBaseLanguageCode {
+    param([Parameter(Mandatory)] [string] $OrgUrl)
+    $orgs = Invoke-DataverseApi -OrgUrl $OrgUrl -Method GET -Path "organizations?`$select=languagecode,basecurrencyid"
+    return $orgs.value[0].languagecode
+}
+
+Export-ModuleMember -Function Connect-DataverseOrg, Get-DataverseToken, Invoke-DataverseApi, Get-DataverseBaseLanguageCode

@@ -1,0 +1,415 @@
+# Table specification for Service Intake V2.
+# Source of truth: docs/03-datenmodell.md §3 (columns), §1/§6 (ownership,
+# security rationale), docs/01-prozessbeschreibung.md (status models).
+# Creation order is significant (dependency order for lookups) and MUST match
+# this file's order: serviceobject -> workorder -> inboundmessage ->
+# processingattempt -> statustransition.
+#
+# ASSUMPTIONS FLAGGED FOR DECISION (see docs/discovery-report.md /
+# docs/architecture.md - neither source doc specifies these explicitly):
+#   - DateTimeBehavior: system/audit-relevant timestamps (receivedon,
+#     decidedon, nextreviewon, startedon, completedon, assignedon,
+#     workorder.completedon) default to TimeZoneIndependent so retention and
+#     SLA math (§9, §11) don't shift with a user's timezone or DST. duedate
+#     stays UserLocal since it's a human-facing appointment time. Confirm
+#     before Phase B if this doesn't match intent.
+#   - hsv_statustransition.hsv_allowedtrigger: docs/03-datenmodell.md §3.5
+#     names the column but never enumerates its values ("Welcher Auslöser
+#     darf das"). Placeholder values below are a reasonable guess from
+#     context (§01 process doc actors/triggers) - NOT authoritative. Flagged
+#     in docs/discovery-report.md; confirm before Phase B creates this table.
+
+tables:
+
+  - logicalName: hsv_serviceobject
+    schemaName: hsv_ServiceObject
+    displayName: Service Object
+    pluralDisplayName: Service Objects
+    description: Objekt / Liegenschaft, an dem ein Auftrag ausgeführt wird.
+    ownershipType: OrganizationOwned
+    auditingEnabled: false
+    primaryNameAttribute:
+      schemaName: hsv_Name
+      displayName: Name
+      maxLength: 100
+      description: 'z. B. "Ludwigstr. 12, VG West"'
+    columns:
+      - schemaName: hsv_Account
+        type: Lookup
+        targets: [account]
+        requiredLevel: Required
+        description: Eigentümer/Verwalter.
+      - schemaName: hsv_ObjectNumber
+        type: String
+        maxLength: 50
+        requiredLevel: Required
+        description: Nummer der Hausverwaltung.
+      - schemaName: hsv_Street
+        type: String
+        maxLength: 250
+        requiredLevel: Required
+      - schemaName: hsv_PostalCode
+        type: String
+        maxLength: 20
+        requiredLevel: Required
+      - schemaName: hsv_City
+        type: String
+        maxLength: 100
+        requiredLevel: Required
+      - schemaName: hsv_Notes
+        type: Memo
+        maxLength: 2000
+        requiredLevel: None
+        description: Zugang, Schlüssel, Besonderheiten.
+    alternateKey:
+      schemaName: hsv_ServiceObject_AccountObjectNumber
+      attributes: [hsv_Account, hsv_ObjectNumber]
+      description: Verhindert doppelte Objekte je Kunde, erlaubt Upsert beim Import.
+
+  - logicalName: hsv_workorder
+    schemaName: hsv_WorkOrder
+    displayName: Work Order
+    pluralDisplayName: Work Orders
+    description: Auftrag. Owner = ausführender Techniker (echtes Dataverse ownership).
+    ownershipType: UserOwned
+    auditingEnabled: true
+    primaryNameAttribute:
+      schemaName: hsv_WorkOrderNumber
+      displayName: Work Order Number
+      type: AutoNumber
+      autoNumberFormat: 'WO-{SEQNUM:00000}'
+      description: Fachliche Referenz nach außen.
+    columns:
+      - schemaName: hsv_Title
+        type: String
+        maxLength: 200
+        requiredLevel: Required
+      - schemaName: hsv_Description
+        type: Memo
+        maxLength: 10000
+        requiredLevel: None
+      - schemaName: hsv_Account
+        type: Lookup
+        targets: [account]
+        requiredLevel: Required
+      - schemaName: hsv_ServiceObject
+        type: Lookup
+        targets: [hsv_serviceobject]
+        requiredLevel: Required
+      - schemaName: hsv_Contact
+        type: Lookup
+        targets: [contact]
+        requiredLevel: None
+        description: Ansprechpartner vor Ort.
+      - schemaName: hsv_Trade
+        type: Choice
+        globalChoice: hsv_Trade
+        requiredLevel: Required
+      - schemaName: hsv_Priority
+        type: Choice
+        globalChoice: hsv_Priority
+        requiredLevel: Required
+      - schemaName: hsv_Status
+        type: Choice
+        globalChoice: hsv_WorkOrderStatus
+        requiredLevel: Required
+        description: Eigene Choice-Spalte; statecode bleibt für Aktiv/Inaktiv reserviert.
+      - schemaName: hsv_SourceMessage
+        type: Lookup
+        targets: [hsv_inboundmessage]
+        requiredLevel: None
+        description: Auslösende Nachricht.
+      - schemaName: hsv_AssignedOn
+        type: DateTime
+        dateTimeBehavior: TimeZoneIndependent
+        requiredLevel: None
+        description: Gesetzt durch Statusübergang, nicht manuell.
+      - schemaName: hsv_CompletedOn
+        type: DateTime
+        dateTimeBehavior: TimeZoneIndependent
+        requiredLevel: None
+        description: Gesetzt durch Statusübergang, nicht manuell.
+      - schemaName: hsv_DueDate
+        type: DateTime
+        dateTimeBehavior: UserLocal
+        requiredLevel: None
+    alternateKey:
+      schemaName: hsv_WorkOrder_Number
+      attributes: [hsv_WorkOrderNumber]
+
+  - logicalName: hsv_inboundmessage
+    schemaName: hsv_InboundMessage
+    displayName: Inbound Message
+    pluralDisplayName: Inbound Messages
+    description: Eingangsregister. Techniker haben keinen Zugriff.
+    ownershipType: OrganizationOwned
+    auditingEnabled: true
+    primaryNameAttribute:
+      schemaName: hsv_Name
+      displayName: Name
+      maxLength: 200
+      description: Gekürzter Betreff.
+    columns:
+      - schemaName: hsv_ProviderMessageId
+        type: String
+        maxLength: 250
+        requiredLevel: Required
+        description: >
+          Unveränderliche ID des Mailanbieters. Unique alternate key = die
+          technische Idempotenz aus Stufe 1. Kein "existiert schon?" davor -
+          create -> Erfolg oder Duplicate-Key-Fehler.
+      - schemaName: hsv_ConversationId
+        type: String
+        maxLength: 250
+        requiredLevel: None
+        description: Erkennt Antworten im bestehenden Thread.
+      - schemaName: hsv_CorrelationId
+        type: String
+        maxLength: 36
+        requiredLevel: Required
+        description: GUID, verbindet alle Verarbeitungsschritte.
+      - schemaName: hsv_ReceivedOn
+        type: DateTime
+        dateTimeBehavior: TimeZoneIndependent
+        requiredLevel: Required
+        description: Zeitpunkt des Eingangs, nicht der Verarbeitung.
+      - schemaName: hsv_FromAddress
+        type: String
+        maxLength: 250
+        requiredLevel: Required
+      - schemaName: hsv_Subject
+        type: String
+        maxLength: 400
+        requiredLevel: None
+      - schemaName: hsv_Body
+        type: Memo
+        maxLength: 100000
+        requiredLevel: None
+        description: Fachdaten, gehört ins Register, nicht ins Protokoll.
+      - schemaName: hsv_HasAttachments
+        type: Boolean
+        requiredLevel: Required
+        defaultValue: false
+      - schemaName: hsv_Status
+        type: Choice
+        globalChoice: hsv_MessageStatus
+        requiredLevel: Required
+      - schemaName: hsv_ReasonCode
+        type: Choice
+        globalChoice: hsv_ReasonCode
+        requiredLevel: None
+      - schemaName: hsv_Account
+        type: Lookup
+        targets: [account]
+        requiredLevel: None
+        description: Ergebnis der Zuordnung.
+      - schemaName: hsv_ServiceObject
+        type: Lookup
+        targets: [hsv_serviceobject]
+        requiredLevel: None
+        description: Ergebnis der Zuordnung.
+      - schemaName: hsv_WorkOrder
+        type: Lookup
+        targets: [hsv_workorder]
+        requiredLevel: None
+        description: Gesetzt bei Converted oder Linked.
+      - schemaName: hsv_BusinessKey
+        type: String
+        maxLength: 250
+        requiredLevel: None
+        description: Kunde + Objekt + normalisierter Inhalt.
+      - schemaName: hsv_BusinessKeyHash
+        type: String
+        maxLength: 64
+        requiredLevel: None
+        description: >
+          SHA-256 des Business Key. Bewusst NICHT unique und in keinem
+          Alternate Key - Stufe 2 schlägt nur vor und blockiert nie. Do not
+          "fix" this into a key later without re-reading docs/03-datenmodell.md §3.3.
+      - schemaName: hsv_DuplicateOf
+        type: Lookup
+        targets: [hsv_inboundmessage]
+        requiredLevel: None
+        description: Selbstbezug auf die Ursprungsnachricht.
+      - schemaName: hsv_MatchReason
+        type: Memo
+        maxLength: 2000
+        requiredLevel: None
+      - schemaName: hsv_DuplicateDecision
+        type: Choice
+        localOptions: hsv_DuplicateDecision
+        requiredLevel: None
+      - schemaName: hsv_DecidedBy
+        type: Lookup
+        targets: [systemuser]
+        requiredLevel: None
+      - schemaName: hsv_DecidedOn
+        type: DateTime
+        dateTimeBehavior: TimeZoneIndependent
+        requiredLevel: None
+      - schemaName: hsv_ExtractionSource
+        type: Choice
+        localOptions: hsv_ExtractionSource
+        requiredLevel: Required
+      - schemaName: hsv_RequiresReview
+        type: Boolean
+        requiredLevel: Required
+        defaultValue: true
+        description: Standard "ja" bei KI-Extraktion.
+      - schemaName: hsv_NextReviewOn
+        type: DateTime
+        dateTimeBehavior: TimeZoneIndependent
+        requiredLevel: None
+        description: Wiedervorlage aus der Klärungsqueue.
+      - schemaName: hsv_RetryCount
+        type: WholeNumber
+        requiredLevel: Required
+        defaultValue: 0
+    alternateKey:
+      schemaName: hsv_InboundMessage_ProviderMessageId
+      attributes: [hsv_ProviderMessageId]
+      unique: true
+
+  - logicalName: hsv_processingattempt
+    schemaName: hsv_ProcessingAttempt
+    displayName: Processing Attempt
+    pluralDisplayName: Processing Attempts
+    description: Bewegungsdaten, nicht Log. Parental zu hsv_inboundmessage.
+    ownershipType: OrganizationOwned
+    auditingEnabled: false
+    primaryNameAttribute:
+      schemaName: hsv_Name
+      displayName: Name
+      type: AutoNumber
+      autoNumberFormat: 'PA-{SEQNUM:000000}'
+    columns:
+      - schemaName: hsv_InboundMessage
+        type: Lookup
+        targets: [hsv_inboundmessage]
+        requiredLevel: Required
+        relationshipBehavior: Parental
+      - schemaName: hsv_CorrelationId
+        type: String
+        maxLength: 36
+        requiredLevel: Required
+        description: Redundant zur Nachricht, für Auswertung ohne Join.
+      - schemaName: hsv_AttemptNumber
+        type: WholeNumber
+        requiredLevel: Required
+      - schemaName: hsv_Stage
+        type: Choice
+        globalChoice: hsv_Stage
+        requiredLevel: Required
+      - schemaName: hsv_Result
+        type: Choice
+        globalChoice: hsv_Result
+        requiredLevel: Required
+      - schemaName: hsv_Retryable
+        type: Boolean
+        requiredLevel: Required
+      - schemaName: hsv_ReasonCode
+        type: Choice
+        globalChoice: hsv_ReasonCode
+        requiredLevel: None
+      - schemaName: hsv_ResponseStatus
+        type: WholeNumber
+        requiredLevel: None
+        description: HTTP-Statuscode ohne Antwortinhalt.
+      - schemaName: hsv_DurationMs
+        type: WholeNumber
+        requiredLevel: None
+      - schemaName: hsv_TriggeredBy
+        type: Choice
+        localOptions: hsv_TriggeredBy
+        requiredLevel: Required
+      - schemaName: hsv_PreviousAttempt
+        type: Lookup
+        targets: [hsv_processingattempt]
+        requiredLevel: None
+        description: Verkettung der Versuche.
+      - schemaName: hsv_ComponentVersion
+        type: String
+        maxLength: 20
+        requiredLevel: Required
+      - schemaName: hsv_StartedOn
+        type: DateTime
+        dateTimeBehavior: TimeZoneIndependent
+        requiredLevel: Required
+      - schemaName: hsv_CompletedOn
+        type: DateTime
+        dateTimeBehavior: TimeZoneIndependent
+        requiredLevel: None
+    alternateKey:
+      schemaName: hsv_ProcessingAttempt_Correlation
+      attributes: [hsv_CorrelationId, hsv_AttemptNumber, hsv_Stage]
+      unique: true
+      description: Macht auch das Protokoll idempotent.
+
+  - logicalName: hsv_statustransition
+    schemaName: hsv_StatusTransition
+    displayName: Status Transition
+    pluralDisplayName: Status Transitions
+    description: >
+      Konfiguration erlaubter Statusübergänge. In dieser Phase nur Tabelle +
+      Schema; der CanTransition-Validator wird nicht implementiert (gehört zur
+      nächsten Phase, siehe docs/03-datenmodell.md §3.5 und Promt §5).
+    ownershipType: OrganizationOwned
+    auditingEnabled: false
+    primaryNameAttribute:
+      schemaName: hsv_Name
+      displayName: Name
+      maxLength: 200
+      description: 'z. B. "Message: Parsed -> Validated"'
+    columns:
+      - schemaName: hsv_EntityName
+        type: Choice
+        localOptions: hsv_EntityName
+        requiredLevel: Required
+      - schemaName: hsv_FromStatus
+        type: String
+        maxLength: 50
+        requiredLevel: Required
+      - schemaName: hsv_ToStatus
+        type: String
+        maxLength: 50
+        requiredLevel: Required
+      - schemaName: hsv_AllowedTrigger
+        type: Choice
+        localOptions: hsv_AllowedTrigger
+        requiredLevel: Required
+        description: >
+          PLACEHOLDER VALUES - see the flag at the top of this file and
+          docs/discovery-report.md. Confirm before Phase B.
+      - schemaName: hsv_IsActive
+        type: Boolean
+        requiredLevel: Required
+        defaultValue: true
+
+# Local (non-global) option sets, defined inline per attribute above.
+localOptionSets:
+  hsv_ExtractionSource:
+    - { value: 209710701, label: Parser }
+    - { value: 209710702, label: KI }
+    - { value: 209710703, label: Manuell }
+
+  hsv_DuplicateDecision:
+    - { value: 209710711, label: Offen }
+    - { value: 209710712, label: Bestätigt }
+    - { value: 209710713, label: Verworfen }
+
+  hsv_TriggeredBy:
+    - { value: 209710721, label: Event }
+    - { value: 209710722, label: Zeitplan }
+    - { value: 209710723, label: Manueller Replay }
+    - { value: 209710724, label: Benutzeraktion }
+
+  hsv_EntityName:
+    - { value: 209710731, label: Message }
+    - { value: 209710732, label: Work Order }
+
+  # PLACEHOLDER - not sourced from docs, see flag at top of file.
+  hsv_AllowedTrigger:
+    - { value: 209710741, label: System }
+    - { value: 209710742, label: Disponent }
+    - { value: 209710743, label: Techniker }
+    - { value: 209710744, label: Plattformbetreuer }

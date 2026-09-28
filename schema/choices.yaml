@@ -1,0 +1,147 @@
+# Global option sets for Service Intake V2.
+# Source: docs/03-datenmodell.md §5 ("Als globale Auswahllisten anlegen...").
+# Numeric values follow the Dataverse convention: base = OptionValuePrefix * 10000
+# (see scripts/config.psd1, OptionValuePrefix: 20971 -> base 209710000), then
+# +1, +2, ... in the order values are listed in the source docs. Once created,
+# these numeric values must never change (see prompt §5 "Numeric values
+# existierender choices nicht ändern").
+
+publisherPrefix: hsv
+optionValuePrefix: 20971 # verified free against all existing publishers, see docs/discovery-report.md
+baseValue: 209710000 # optionValuePrefix * 10000
+
+globalChoices:
+
+  - schemaName: hsv_MessageStatus
+    displayName: Message Status
+    description: >
+      Lifecycle status of an inbound message. Source: docs/01-prozessbeschreibung.md
+      §5.1 and docs/03-datenmodell.md §3.3.
+    options:
+      - value: 209710001
+        label: Received
+      - value: 209710002
+        label: Parsed
+      - value: 209710003
+        label: Validated
+      - value: 209710004
+        label: Needs Clarification
+      - value: 209710005
+        label: Potential Duplicate
+      - value: 209710006
+        label: Duplicate
+      - value: 209710007
+        label: Not Relevant
+      - value: 209710008
+        label: Linked
+      - value: 209710009
+        label: Converted
+      - value: 209710010
+        label: Technical Retry
+      - value: 209710011
+        label: Failed
+
+  - schemaName: hsv_WorkOrderStatus
+    displayName: Work Order Status
+    description: >
+      Lifecycle status of a work order. Source: docs/01-prozessbeschreibung.md
+      §5.2. Deliberately a Choice column, not statecode - statecode stays
+      reserved for Active/Inactive (docs/03-datenmodell.md §3.2).
+    options:
+      - value: 209710101
+        label: Neu
+      - value: 209710102
+        label: Zugewiesen
+      - value: 209710103
+        label: In Arbeit
+      - value: 209710104
+        label: Abgeschlossen
+      - value: 209710105
+        label: Storniert
+
+  - schemaName: hsv_Stage
+    displayName: Processing Stage
+    description: >
+      Which stage of message processing a hsv_processingattempt row records.
+      Source: docs/03-datenmodell.md §3.4 / docs/01-prozessbeschreibung.md §8.
+    options:
+      - value: 209710201
+        label: Ingest
+      - value: 209710202
+        label: Parse
+      - value: 209710203
+        label: Validate
+      - value: 209710204
+        label: Duplicate Check
+      - value: 209710205
+        label: Create
+      - value: 209710206
+        label: ERP
+      - value: 209710207
+        label: Notify
+
+  - schemaName: hsv_Result
+    displayName: Processing Result
+    description: Outcome of a single processing attempt/stage.
+    options:
+      - value: 209710301
+        label: Success
+      - value: 209710302
+        label: Business Exception
+      - value: 209710303
+        label: Technical Failure
+      - value: 209710304
+        label: Skipped
+
+  - schemaName: hsv_ReasonCode
+    displayName: Reason Code
+    description: >
+      Machine-readable reason codes shared between hsv_inboundmessage and
+      hsv_processingattempt. Source: docs/03-datenmodell.md §5. If this list
+      grows past ~30 values, replace it with a configuration table per the
+      doc's own note - do not silently keep bolting values onto this set.
+    options:
+      - value: 209710401
+        label: MISSING_OBJECT_ADDRESS
+      - value: 209710402
+        label: UNKNOWN_CUSTOMER
+      - value: 209710403
+        label: NOT_A_REQUEST
+      - value: 209710404
+        label: POSSIBLE_DUPLICATE
+      - value: 209710405
+        label: HTTP_429
+      - value: 209710406
+        label: ERP_UNAVAILABLE
+      - value: 209710407
+        label: SCHEMA_MISMATCH
+      - value: 209710408
+        label: INVALID_TRANSITION
+      - value: 209710409
+        label: RETRY_BUDGET_EXCEEDED
+
+  - schemaName: hsv_Trade
+    displayName: Trade
+    description: Gewerk / craft classification of a work order.
+    options:
+      - value: 209710501
+        label: Sanitär
+      - value: 209710502
+        label: Elektro
+      - value: 209710503
+        label: Heizung
+      - value: 209710504
+        label: Schließanlage
+      - value: 209710505
+        label: Sonstiges
+
+  - schemaName: hsv_Priority
+    displayName: Priority
+    description: Priority of a work order.
+    options:
+      - value: 209710601
+        label: Standard
+      - value: 209710602
+        label: Dringend
+      - value: 209710603
+        label: Notfall

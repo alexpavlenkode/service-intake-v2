@@ -1,0 +1,44 @@
+# Alternate keys for Service Intake V2.
+# Source: docs/03-datenmodell.md §3.1/§3.2/§3.3/§3.4. Mirrors the
+# `alternateKey` blocks already declared per-table in tables.yaml; this file
+# is what verify.ps1 and deploy.ps1's key-specific polling logic iterate over.
+#
+# Key creation is asynchronous in Dataverse. deploy.ps1 must poll
+# EntityKeyMetadata.EntityKeyIndexStatus until Active, with a timeout; Pending
+# or Failed after timeout is a deployment ERROR, not a warning (Promt §6).
+
+keys:
+
+  - entity: hsv_serviceobject
+    schemaName: hsv_ServiceObject_AccountObjectNumber
+    attributes: [hsv_Account, hsv_ObjectNumber]
+    purpose: Verhindert doppelte Objekte je Kunde, erlaubt Upsert beim Import.
+
+  - entity: hsv_workorder
+    schemaName: hsv_WorkOrder_Number
+    attributes: [hsv_WorkOrderNumber]
+    purpose: Fachliche Referenz eindeutig.
+
+  - entity: hsv_inboundmessage
+    schemaName: hsv_InboundMessage_ProviderMessageId
+    attributes: [hsv_ProviderMessageId]
+    purpose: >
+      REQUIRED per Promt §6. Technische Idempotenz (Stufe 1). Ein zweiter
+      Create-Versuch mit derselber Provider-Message-ID muss mit einem
+      Duplicate-Key-Fehler scheitern - keine "existiert schon?"-Prüfung davor.
+    mandatory: true
+
+  - entity: hsv_processingattempt
+    schemaName: hsv_ProcessingAttempt_Correlation
+    attributes: [hsv_CorrelationId, hsv_AttemptNumber, hsv_Stage]
+    purpose: Macht auch das Protokoll idempotent - kein doppelter Log-Eintrag bei doppelt ausgeführtem Schritt.
+
+# Explicitly NOT a key (documented so nobody "fixes" this later):
+notKeys:
+  - entity: hsv_inboundmessage
+    attribute: hsv_BusinessKeyHash
+    reason: >
+      Fachliche Dublettenprüfung (Stufe 2) schlägt nur vor und blockiert nie.
+      Making this unique or part of any key would silently reject legitimate
+      second orders (docs/01-prozessbeschreibung.md §6 example: "Wasserhahn
+      Küche" vs "Wasserhahn Bad" two hours apart).
