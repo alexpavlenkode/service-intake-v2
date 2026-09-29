@@ -10,6 +10,7 @@ are actual observed behavior, not just assertions.
 | `deploy-output-SI-TEST-from-scratch.txt` | Full deployment from scratch into a second, previously empty environment (SI-TEST), using the identical scripts and `schema/*.yaml`, only the config file's environment/URL differs. Proves reproducibility - not just idempotency on the one environment that happened to be hand-tuned. |
 | `idempotency-report.md` | `hsv_providermessageid`'s alternate key rejects a duplicate `POST` outright (HTTP 412, `error.code=0x80060892`), not application-level check-then-create logic. |
 | `access-test-report.md` | The `HSV Techniker` security role's row-level scoping is enforced by Dataverse itself (HTTP 403 before ownership, success after), not just configured and untested. |
+| `cantransition-report.md` | The `CanTransition` plugin blocks invalid status transitions (`Neu → Abgeschlossen`, `Received → Converted`) via a direct Web API `PATCH` - not just described in `docs/architecture.md` - while valid ones (`Neu → Zugewiesen`, `Received → Parsed`) still succeed. |
 
 ## Known gap: no screenshots
 
