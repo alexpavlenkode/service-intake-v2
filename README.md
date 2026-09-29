@@ -154,6 +154,22 @@ the console as it happens. The generated report
 in a browser) shows each message's path with click-to-expand detail per
 node.
 
+### Live console (browser UI, real backend)
+
+A dark, interactive compose screen instead of the terminal - type anything
+you want and watch it fly, or fire several synthetic messages at once. It's
+a local web page backed by a local server this project runs: the browser
+never touches Dataverse directly (it can't hold an OAuth token safely); the
+server does, using the same `Az.Accounts` session as everything else here.
+
+```powershell
+powershell -File scripts\serve-live-console.ps1
+# then open http://localhost:8787 in a browser
+```
+
+Every send is a real call, same as `demo-pipeline.ps1` - not a client-side
+mockup. If port 8787 is taken, pass `-Port <n>`.
+
 ## Reproducibility & evidence
 
 - Re-running `deploy.ps1 -Apply` against the already-deployed SI-DEV: 0
