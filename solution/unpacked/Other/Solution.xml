@@ -86,6 +86,10 @@
       <RootComponent type="1" schemaName="hsv_statustransition" behavior="0" />
       <RootComponent type="1" schemaName="hsv_workorder" behavior="0" />
       <RootComponent type="1" schemaName="systemuser" behavior="1" />
+      <RootComponent type="20" id="{0b79068f-8cbb-f111-aaad-002248d8a892}" behavior="0" />
+      <RootComponent type="20" id="{1d79068f-8cbb-f111-aaad-002248d8a892}" behavior="0" />
+      <RootComponent type="20" id="{40f966a4-88bb-f111-aaad-002248d8a892}" behavior="0" />
+      <RootComponent type="20" id="{e278068f-8cbb-f111-aaad-002248d8a892}" behavior="0" />
       <RootComponent type="9" schemaName="hsv_messagestatus" behavior="0" />
       <RootComponent type="9" schemaName="hsv_priority" behavior="0" />
       <RootComponent type="9" schemaName="hsv_reasoncode" behavior="0" />
@@ -93,6 +97,11 @@
       <RootComponent type="9" schemaName="hsv_stage" behavior="0" />
       <RootComponent type="9" schemaName="hsv_trade" behavior="0" />
       <RootComponent type="9" schemaName="hsv_workorderstatus" behavior="0" />
+      <RootComponent type="91" id="{623c8054-10bc-f111-aaad-002248d8a892}" schemaName="Hsv.ServiceIntake.Plugins, Version=1.0.0.0, Culture=neutral, PublicKeyToken=c2b404b88fc5885f" behavior="0" />
+      <RootComponent type="92" id="{5503935a-10bc-f111-aaad-002248d8a892}" behavior="0" />
+      <RootComponent type="92" id="{c508e335-3ebc-f111-aaad-002248d8a892}" behavior="0" />
+      <RootComponent type="92" id="{c808e335-3ebc-f111-aaad-002248d8a892}" behavior="0" />
+      <RootComponent type="92" id="{e16af669-10bc-f111-aaad-002248d8a892}" behavior="0" />
     </RootComponents>
     <MissingDependencies>
       <MissingDependency>

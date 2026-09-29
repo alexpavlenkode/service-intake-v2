@@ -62,6 +62,31 @@ $rootBuId = $rootBu.value[0].businessunitid
 
 $existingRoles = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "roles?`$select=name,roleid"
 
+# Role's solution component type. Roles were originally created via plain
+# POST without MSCRM.SolutionUniqueName, so none of the 4 ended up IN the
+# solution at all (review item 8) - verify.ps1 never caught it because it
+# only checked "does the role exist", not solution membership. Fixed below:
+# every role this script touches gets an explicit AddSolutionComponent call,
+# which is safe to repeat (Dataverse no-ops if it's already a member).
+$RoleComponentType = 20
+$sol = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "solutions?`$select=solutionid&`$filter=uniquename eq '$($config.SolutionUniqueName)'"
+$solutionId = $sol.value[0].solutionid
+function Add-ToSolutionIfMissing {
+    param([string] $ComponentId, [int] $ComponentType, [string] $Label)
+    $existingComponent = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "solutioncomponents?`$filter=_solutionid_value eq $solutionId and componenttype eq $ComponentType and objectid eq $ComponentId&`$select=solutioncomponentid"
+    if ($existingComponent.value.Count -gt 0) {
+        Write-Output "[VERIFY] $Label already in solution $($config.SolutionUniqueName)."
+        return
+    }
+    Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'AddSolutionComponent' -Body @{
+        ComponentId        = $ComponentId
+        ComponentType      = $ComponentType
+        SolutionUniqueName = $config.SolutionUniqueName
+        AddRequiredComponents = $false
+    } | Out-Null
+    Write-Output "[CREATE] $Label added to solution $($config.SolutionUniqueName)."
+}
+
 $rolesToProcess = $securitySpec.roles
 if ($OnlyRoles) { $rolesToProcess = $securitySpec.roles | Where-Object { $_.name -in $OnlyRoles } }
 
@@ -87,6 +112,7 @@ foreach ($role in $rolesToProcess) {
         $ourMarkerPriv = "prv$ourFirstAction$ourFirstEntity"
         if ($ourMarkerPriv -in $currentNames) {
             Write-Output "[VERIFY] Role '$($role.name)': already exists with our privileges assigned ($($currentNames.Count) total incl. Dataverse defaults) - diff not checked by this pass."
+            if ($Apply) { Add-ToSolutionIfMissing -ComponentId $roleId -ComponentType $RoleComponentType -Label "Role '$($role.name)'" }
             continue
         }
         Write-Output "[CREATE] Role '$($role.name)': exists but our privileges aren't assigned yet (resuming an interrupted run) - assigning $totalPrivs privilege grants."
@@ -107,6 +133,8 @@ foreach ($role in $rolesToProcess) {
         $roleId = $lookup.value[0].roleid
         Write-Output "[CREATE] Role '$($role.name)' created (roleid $roleId)."
     }
+
+    Add-ToSolutionIfMissing -ComponentId $roleId -ComponentType $RoleComponentType -Label "Role '$($role.name)'"
 
     $rolePrivileges = New-Object System.Collections.Generic.List[object]
     foreach ($grant in $role.privileges) {

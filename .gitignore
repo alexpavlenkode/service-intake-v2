@@ -14,7 +14,10 @@ logs/*
 !logs/.gitkeep
 
 # Solution export artifacts are tracked selectively; ignore transient zips
+# and downloaded solution-checker reports. solution/unpacked/ (the actual
+# source-controlled solution) IS tracked.
 solution/*.zip
+solution/check-results/
 
 # Local editor / OS noise
 .vscode/

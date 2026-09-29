@@ -30,6 +30,7 @@ Import-Module "$PSScriptRoot\lib\Dataverse.psm1" -Force
 $config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
 $org = $config.OrgUrl
+$solutionId = (Invoke-DataverseApi -OrgUrl $org -Method GET -Path "solutions?`$select=solutionid&`$filter=uniquename eq '$($config.SolutionUniqueName)'").value[0].solutionid
 
 $assemblyName = 'Hsv.ServiceIntake.Plugins'
 $typeName     = 'Hsv.ServiceIntake.Plugins.CanTransitionPlugin'
@@ -37,6 +38,35 @@ $dllBytes     = [System.IO.File]::ReadAllBytes($DllPath)
 $dllBase64    = [System.Convert]::ToBase64String($dllBytes)
 
 Write-Output "[INFO] DLL: $DllPath ($($dllBytes.Length) bytes)"
+
+# Dataverse solution component type codes (not in most human-facing docs,
+# confirmed against Microsoft's SolutionComponentType option set).
+$ComponentTypePluginAssembly = 91
+$ComponentTypePluginType     = 90
+$ComponentTypeSdkStep        = 92
+$ComponentTypeSdkStepImage   = 93
+
+function Add-ToSolutionIfMissing {
+    # Every piece of this plugin (assembly/type/steps/images) was originally
+    # registered via plain POST without MSCRM.SolutionUniqueName, so NONE of
+    # it ended up in the solution at all (review item 9) - the solution
+    # export a customer would actually receive didn't include the plugin
+    # that enforces the security model's status-transition rules. Fixed by
+    # explicitly adding every component here; safe to repeat.
+    param([string] $ComponentId, [int] $ComponentType, [string] $Label)
+    $existingComponent = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "solutioncomponents?`$filter=_solutionid_value eq $solutionId and componenttype eq $ComponentType and objectid eq $ComponentId&`$select=solutioncomponentid"
+    if ($existingComponent.value.Count -gt 0) {
+        Write-Output "[VERIFY] $Label already in solution $($config.SolutionUniqueName)."
+        return
+    }
+    Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'AddSolutionComponent' -Body @{
+        ComponentId        = $ComponentId
+        ComponentType      = $ComponentType
+        SolutionUniqueName = $config.SolutionUniqueName
+        AddRequiredComponents = $false
+    } | Out-Null
+    Write-Output "[CREATE] $Label added to solution $($config.SolutionUniqueName)."
+}
 
 # --- 1. Plugin assembly ---------------------------------------------------
 $existingAssembly = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "pluginassemblies?`$select=pluginassemblyid,version&`$filter=name eq '$assemblyName'"
@@ -69,6 +99,7 @@ if (-not $Apply) {
 
 $assemblyId = $existingAssembly.value[0].pluginassemblyid
 Write-Output "[INFO] Assembly id: $assemblyId"
+Add-ToSolutionIfMissing -ComponentId $assemblyId -ComponentType $ComponentTypePluginAssembly -Label "Plugin assembly '$assemblyName'"
 
 # --- 2. Plugin type ---------------------------------------------------------
 $existingType = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "plugintypes?`$select=plugintypeid&`$filter=typename eq '$typeName'"
@@ -85,6 +116,16 @@ if ($existingType.value.Count -eq 0) {
     Write-Output "[VERIFY] Plugin type '$typeName' already exists."
 }
 $typeId = $existingType.value[0].plugintypeid
+# NOT added as its own solution component: AddSolutionComponent with
+# ComponentType=90 (Plug-In-Typ, confirmed against the solutioncomponent.
+# componenttype picklist metadata) consistently 404s - "Entity
+# 'pluginassembly' With Id = <the plugintype's own id> Does Not Exist" -
+# regardless of AddRequiredComponents. Confirmed empirically this isn't
+# needed anyway: adding the SdkMessageProcessingStep (which references this
+# plugintypeid) succeeds and is what actually matters for a target
+# environment to get a working plugin on import - the platform resolves/
+# creates the Plugin Type as part of importing the Assembly + Step, it just
+# isn't independently addressable as its own solutioncomponent row here.
 
 # --- 3. SDK messages (Create, Update) and per-entity filters ---------------
 function Get-SdkMessageId {
@@ -128,6 +169,7 @@ function Register-StepForEntity {
         $stepId = $lookup.value[0].sdkmessageprocessingstepid
         Write-Output "[CREATE] Step '$stepName' created."
     }
+    Add-ToSolutionIfMissing -ComponentId $stepId -ComponentType $ComponentTypeSdkStep -Label "Step '$stepName'"
 
     if (-not $WithPreImage) {
         # Create has no prior state - CanTransitionPlugin treats "record
@@ -138,6 +180,7 @@ function Register-StepForEntity {
     $existingImage = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessageprocessingstepimages?`$select=sdkmessageprocessingstepimageid&`$filter=name eq 'PreImage' and _sdkmessageprocessingstepid_value eq $stepId"
     if ($existingImage.value.Count -gt 0) {
         Write-Output "[VERIFY] Pre-Image on '$stepName' already exists."
+        $imageId = $existingImage.value[0].sdkmessageprocessingstepimageid
     } else {
         $imageBody = @{
             name                            = 'PreImage'
@@ -148,9 +191,21 @@ function Register-StepForEntity {
             'sdkmessageprocessingstepid@odata.bind' = "/sdkmessageprocessingsteps($stepId)"
         }
         Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'sdkmessageprocessingstepimages' -Body $imageBody | Out-Null
+        $lookup = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessageprocessingstepimages?`$select=sdkmessageprocessingstepimageid&`$filter=name eq 'PreImage' and _sdkmessageprocessingstepid_value eq $stepId"
+        $imageId = $lookup.value[0].sdkmessageprocessingstepimageid
         Write-Output "[CREATE] Pre-Image on '$stepName' created."
     }
+    # NOT added as its own solution component - same class of finding as
+    # Plugin Type above. AddSolutionComponent with ComponentType=93
+    # consistently 400s regardless of AddRequiredComponents/
+    # DoNotIncludeSubcomponents: "Subcomponent <id> cannot be added to the
+    # solution because the root component SdkMessageProcessingStepImage is
+    # missing." Confirmed the step's own solution membership (added above)
+    # is what actually matters - a Pre-Image is a child of its step's own
+    # definition, not an independently exportable object in this API
+    # version.
 }
+
 
 foreach ($entity in @('hsv_workorder', 'hsv_inboundmessage')) {
     Register-StepForEntity $entity 'Create' $createMsgId $false

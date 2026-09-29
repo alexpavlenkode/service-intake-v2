@@ -2,12 +2,14 @@
 <EntityRelationships xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <EntityRelationship Name="business_unit_hsv_workorder" />
   <EntityRelationship Name="contact_hsv_workorder" />
+  <EntityRelationship Name="hsv_account_inboundmessage" />
   <EntityRelationship Name="hsv_account_serviceobject" />
   <EntityRelationship Name="hsv_account_workorder" />
   <EntityRelationship Name="hsv_inboundmessage_duplicateof" />
   <EntityRelationship Name="hsv_inboundmessage_processingattempt" />
   <EntityRelationship Name="hsv_inboundmessage_sourcemessage" />
   <EntityRelationship Name="hsv_processingattempt_previousattempt" />
+  <EntityRelationship Name="hsv_serviceobject_inboundmessage" />
   <EntityRelationship Name="hsv_serviceobject_workorder" />
   <EntityRelationship Name="hsv_systemuser_inboundmessage_decidedby" />
   <EntityRelationship Name="hsv_workorder_inboundmessage" />

@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<SdkMessageProcessingStep Name="CanTransitionPlugin: Update of hsv_workorder (Pre-Operation)" SdkMessageProcessingStepId="{5503935a-10bc-f111-aaad-002248d8a892}" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <SdkMessageId>20bebb1b-ea3e-db11-86a7-000a3a5473e8</SdkMessageId>
+  <PluginTypeName>Hsv.ServiceIntake.Plugins.CanTransitionPlugin, Hsv.ServiceIntake.Plugins, Version=1.0.0.0, Culture=neutral, PublicKeyToken=c2b404b88fc5885f</PluginTypeName>
+  <PluginTypeId>833c8054-10bc-f111-aaad-002248d8a892</PluginTypeId>
+  <PrimaryEntity>hsv_workorder</PrimaryEntity>
+  <AsyncAutoDelete>0</AsyncAutoDelete>
+  <FilteringAttributes>hsv_status</FilteringAttributes>
+  <InvocationSource>1</InvocationSource>
+  <Mode>0</Mode>
+  <Rank>1</Rank>
+  <EventHandlerTypeCode>4602</EventHandlerTypeCode>
+  <Stage>20</Stage>
+  <IsCustomizable>1</IsCustomizable>
+  <IsHidden>0</IsHidden>
+  <SupportedDeployment>0</SupportedDeployment>
+  <IntroducedVersion>1.0.0.0</IntroducedVersion>
+  <SdkMessageProcessingStepImages>
+    <SdkMessageProcessingStepImage Name="PreImage">
+      <SdkMessageProcessingStepImageId>{df6af669-10bc-f111-aaad-002248d8a892}</SdkMessageProcessingStepImageId>
+      <Attributes>hsv_status</Attributes>
+      <EntityAlias>PreImage</EntityAlias>
+      <ImageType>0</ImageType>
+      <MessagePropertyName>Target</MessagePropertyName>
+      <IsCustomizable>1</IsCustomizable>
+    </SdkMessageProcessingStepImage>
+  </SdkMessageProcessingStepImages>
+</SdkMessageProcessingStep>

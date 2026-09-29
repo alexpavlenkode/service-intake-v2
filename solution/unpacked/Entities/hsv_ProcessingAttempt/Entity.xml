@@ -200,7 +200,7 @@
           <IsLocalizable>0</IsLocalizable>
           <Format>datetime</Format>
           <CanChangeDateTimeBehavior>1</CanChangeDateTimeBehavior>
-          <Behavior>3</Behavior>
+          <Behavior>1</Behavior>
           <displaynames>
             <displayname description="Completed On" languagecode="1031" />
           </displaynames>
@@ -689,7 +689,7 @@
           <IsLocalizable>0</IsLocalizable>
           <Format>datetime</Format>
           <CanChangeDateTimeBehavior>1</CanChangeDateTimeBehavior>
-          <Behavior>3</Behavior>
+          <Behavior>1</Behavior>
           <displaynames>
             <displayname description="Started On" languagecode="1031" />
           </displaynames>

@@ -274,6 +274,9 @@ foreach ($role in $securitySpec.roles) {
     }
     if ($r.value.Count -ne 1) { continue }
     $roleId = $r.value[0].roleid
+    Test-Check "Role '$($role.name)' is in solution $($config.SolutionUniqueName)" {
+        [bool]($solutionComponents | Where-Object { $_.componenttype -eq 20 -and $_.objectid -eq $roleId })
+    }
     $actual = (Invoke-DataverseApi -OrgUrl $org -Method GET -Path "RetrieveRolePrivilegesRole(RoleId=$roleId)").RolePrivileges
 
     foreach ($g in $expectedGrants) {
@@ -326,6 +329,11 @@ $asm = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "pluginassemblies?`$se
 Test-Check "Plugin assembly '$assemblyName' is registered" {
     $asm.value.Count -eq 1
 }
+if ($asm.value.Count -eq 1) {
+    Test-Check "Plugin assembly '$assemblyName' is in solution $($config.SolutionUniqueName)" {
+        [bool]($solutionComponents | Where-Object { $_.componenttype -eq 91 -and $_.objectid -eq $asm.value[0].pluginassemblyid })
+    }
+}
 
 $type = $null
 if ($asm.value.Count -eq 1) {
@@ -343,6 +351,11 @@ foreach ($entity in @('hsv_workorder', 'hsv_inboundmessage')) {
             if ($step.value.Count -ne 1) { return $false }
             $s = $step.value[0]
             ($s.stage -eq 20) -and ($s.mode -eq 0) -and ($s.statecode -eq 0) -and ($s.filteringattributes -match 'hsv_status')
+        }
+        if ($step.value.Count -eq 1) {
+            Test-Check "Plugin step '$stepName' is in solution $($config.SolutionUniqueName)" {
+                [bool]($solutionComponents | Where-Object { $_.componenttype -eq 92 -and $_.objectid -eq $step.value[0].sdkmessageprocessingstepid })
+            }
         }
         if ($msgName -eq 'Update' -and $step.value.Count -eq 1) {
             $stepId = $step.value[0].sdkmessageprocessingstepid

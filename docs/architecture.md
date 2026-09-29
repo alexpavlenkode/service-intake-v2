@@ -143,6 +143,55 @@ address. Patching only the duplicate case there would leave it
 inconsistent in a different way (duplicates logged, successes not).
 Revisit once 18/19 unify both callers onto one shared pipeline module.
 
+## Security Roles and the plugin are now actually IN the solution (review items 8-11, 2026-09)
+
+Both `scripts/deploy-security.ps1` (roles) and `scripts/register-plugin.ps1`
+(plugin assembly/type/steps/images) originally created their components via
+plain `POST` with no `MSCRM.SolutionUniqueName` header - so none of it was
+ever part of `HSVServiceIntakeV2`. A solution export a customer actually
+received would have been missing the security model AND the plugin that
+enforces it entirely. `verify.ps1` never caught this because "does the role
+exist" and "is the plugin registered" are different questions from "is it
+IN THE SOLUTION" - fixed by adding explicit `is in solution` checks
+alongside the existing existence checks.
+
+Fixed by having both scripts call the `AddSolutionComponent` action
+explicitly (idempotent - checks `solutioncomponents` first) for every
+component they touch. Two real platform quirks surfaced while doing this,
+both confirmed empirically, neither documented anywhere obvious:
+
+- **Plugin Type (componenttype 90) cannot be added as its own solution
+  component** - `AddSolutionComponent` 404s with "Entity 'pluginassembly'
+  With Id = &lt;the plugin type's own id&gt; Does Not Exist", regardless of
+  `AddRequiredComponents`. Not needed anyway: a `SdkMessageProcessingStep`
+  references its `PluginTypeId` directly, and the exported step XML embeds
+  that reference - the target environment resolves the Plugin Type as part
+  of importing the Assembly + Step.
+- **SdkMessageProcessingStepImage (componenttype 93) cannot be added as its
+  own solution component either** - 400s with "Subcomponent &lt;id&gt;
+  cannot be added to the solution because the root component
+  SdkMessageProcessingStepImage is missing." Confirmed via the actual
+  unpacked solution XML that this doesn't matter: a Pre-Image is embedded
+  directly inside its parent step's own `<SdkMessageProcessingStepImages>`
+  element, not represented as an independent object.
+
+**Packaging (item 10)**: `scripts/package-solution.ps1` exports the
+solution UNMANAGED from SI-DEV and unpacks it into `solution/unpacked/`
+(the actual source of truth, committed to git - DEV always imports/works
+from unmanaged so this project's own further changes stay editable there),
+and separately exports a MANAGED zip for TEST/PROD (customizations locked
+down in downstream environments, the conventional pattern). Requires `pac
+auth` already pointed at SI-DEV; the script deliberately does not switch
+profiles itself, to avoid silently packaging from the wrong environment.
+
+**Solution Checker (item 11)**: the same script runs `pac solution check`
+against the unmanaged zip, downloads and parses the SARIF report, and fails
+(non-zero exit) on any High/Critical finding - `pac solution check` itself
+always exits 0 regardless of findings, it only prints a severity table, so
+a human glancing at exit codes alone would miss a real failure. First real
+run against this solution: 0 findings at every severity (Critical/High/
+Medium/Low/Informational).
+
 ## Resolved discrepancy: solution name
 
 The project prompt names the solution `HSVServiceIntakeV2` / "HSV Service
