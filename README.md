@@ -128,6 +128,32 @@ check. Verified with direct Web API `PATCH` calls in
 `hsv_allowedtrigger` (its values are an unconfirmed placeholder - see
 `docs/architecture.md`).
 
+## Demo: watch a message fly through the pipeline
+
+There is no AI/email parser in this project (out of scope) - but everything
+*downstream* of "a structured message arrived" is real and demoable:
+
+```powershell
+# One message you compose yourself
+powershell -File scripts\demo-pipeline.ps1 -Interactive
+
+# N synthetic messages, deliberately hitting different branches
+# (clean success, business duplicate, technical duplicate, missing
+# field, not-a-request)
+powershell -File scripts\demo-pipeline.ps1 -Random 5
+
+# Turn the resulting trace into a clickable HTML report
+powershell -File scripts\generate-demo-report.ps1
+```
+
+Every stage (Ingest, Parse, Validate, Duplicate Check, Decision) is a real
+Dataverse call - the same alternate key, business-key hash lookup, and
+`hsv_processingattempt` logging the rest of this project uses, animated in
+the console as it happens. The generated report
+(`evidence/demo-flight-report-sample.html` has a sample - open it directly
+in a browser) shows each message's path with click-to-expand detail per
+node.
+
 ## Reproducibility & evidence
 
 - Re-running `deploy.ps1 -Apply` against the already-deployed SI-DEV: 0

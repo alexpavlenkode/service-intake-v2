@@ -11,6 +11,7 @@ are actual observed behavior, not just assertions.
 | `idempotency-report.md` | `hsv_providermessageid`'s alternate key rejects a duplicate `POST` outright (HTTP 412, `error.code=0x80060892`), not application-level check-then-create logic. |
 | `access-test-report.md` | The `HSV Techniker` security role's row-level scoping is enforced by Dataverse itself (HTTP 403 before ownership, success after), not just configured and untested. |
 | `cantransition-report.md` | The `CanTransition` plugin blocks invalid status transitions (`Neu → Abgeschlossen`, `Received → Converted`) via a direct Web API `PATCH` - not just described in `docs/architecture.md` - while valid ones (`Neu → Zugewiesen`, `Received → Parsed`) still succeed. |
+| `demo-flight-report-sample.html` | Open this one directly in a browser. A `scripts/demo-pipeline.ps1` run visualized: 4 synthetic messages, each genuinely processed by SI-DEV (idempotency check, business-key duplicate lookup, real `hsv_processingattempt` rows), shown flying through Ingest → Parse → Validate → Duplicate Check → Decision. Click any node for what happened at that stage. `demo-flight-trace-sample.json` is the raw data behind it. |
 
 ## Known gap: no screenshots
 

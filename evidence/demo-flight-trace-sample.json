@@ -1,0 +1,167 @@
+﻿[
+    {
+        "index":  1,
+        "input":  {
+                      "Problem":  "Heizung Problem im Objekt N-01",
+                      "Street":  "Ludwigstr. 12",
+                      "ProviderMessageId":  "DEMO-4f22d1ce",
+                      "ObjectNumber":  "N-01",
+                      "TradeLabel":  "Heizung",
+                      "CustomerName":  "Hausverwaltung Nord",
+                      "FromAddress":  "kunde0@example.invalid",
+                      "TradeValue":  209710503,
+                      "NotARequest":  false,
+                      "Subject":  "Reparaturanfrage: Heizung",
+                      "Body":  "Heizung Problem im Objekt N-01"
+                  },
+        "stages":  [
+                       {
+                           "detail":  "hsv_inboundmessage created (409277d4-1fbc-f111-aaad-002248d8a892)",
+                           "result":  "Pass",
+                           "name":  "Ingest"
+                       },
+                       {
+                           "detail":  "Customer=Hausverwaltung Nord, Object=N-01, Trade=Heizung",
+                           "result":  "Pass",
+                           "name":  "Parse"
+                       },
+                       {
+                           "detail":  "All required fields present",
+                           "result":  "Pass",
+                           "name":  "Validate"
+                       },
+                       {
+                           "detail":  "No business-key match in 72h window",
+                           "result":  "Pass",
+                           "name":  "Duplicate Check"
+                       },
+                       {
+                           "detail":  "Work Order 4a9277d4-1fbc-f111-aaad-002248d8a892 created",
+                           "result":  "Converted",
+                           "name":  "Decision"
+                       }
+                   ],
+        "finalStatus":  "Converted",
+        "finalDetail":  "Work Order 4a9277d4-1fbc-f111-aaad-002248d8a892 (Neu) - bereit fuer Zuweisung."
+    },
+    {
+        "index":  2,
+        "input":  {
+                      "Problem":  "Heizung Problem im Objekt S-01",
+                      "Street":  "Suedring 4",
+                      "ProviderMessageId":  "DEMO-b14ad8ea",
+                      "ObjectNumber":  "S-01",
+                      "TradeLabel":  "Heizung",
+                      "CustomerName":  "Gewerbepark Sued",
+                      "FromAddress":  "kunde1@example.invalid",
+                      "TradeValue":  209710503,
+                      "NotARequest":  false,
+                      "Subject":  "Reparaturanfrage: Heizung",
+                      "Body":  "Heizung Problem im Objekt S-01"
+                  },
+        "stages":  [
+                       {
+                           "detail":  "hsv_inboundmessage created (4e9277d4-1fbc-f111-aaad-002248d8a892)",
+                           "result":  "Pass",
+                           "name":  "Ingest"
+                       },
+                       {
+                           "detail":  "Customer=Gewerbepark Sued, Object=S-01, Trade=Heizung",
+                           "result":  "Pass",
+                           "name":  "Parse"
+                       },
+                       {
+                           "detail":  "All required fields present",
+                           "result":  "Pass",
+                           "name":  "Validate"
+                       },
+                       {
+                           "detail":  "No business-key match in 72h window",
+                           "result":  "Pass",
+                           "name":  "Duplicate Check"
+                       },
+                       {
+                           "detail":  "Work Order 93747eda-1fbc-f111-aaad-002248d8a892 created",
+                           "result":  "Converted",
+                           "name":  "Decision"
+                       }
+                   ],
+        "finalStatus":  "Converted",
+        "finalDetail":  "Work Order 93747eda-1fbc-f111-aaad-002248d8a892 (Neu) - bereit fuer Zuweisung."
+    },
+    {
+        "index":  3,
+        "input":  {
+                      "Problem":  "Heizung Problem im Objekt S-01",
+                      "Street":  "Ludwigstr. 30",
+                      "ProviderMessageId":  "DEMO-dabf4b6e",
+                      "ObjectNumber":  "S-01",
+                      "TradeLabel":  "Sanitaer",
+                      "CustomerName":  "Gewerbepark Sued",
+                      "FromAddress":  "kunde2@example.invalid",
+                      "TradeValue":  209710501,
+                      "NotARequest":  false,
+                      "Subject":  "Reparaturanfrage: Sanitaer",
+                      "Body":  "Heizung Problem im Objekt S-01"
+                  },
+        "stages":  [
+                       {
+                           "detail":  "hsv_inboundmessage created (97747eda-1fbc-f111-aaad-002248d8a892)",
+                           "result":  "Pass",
+                           "name":  "Ingest"
+                       },
+                       {
+                           "detail":  "Customer=Gewerbepark Sued, Object=S-01, Trade=Sanitaer",
+                           "result":  "Pass",
+                           "name":  "Parse"
+                       },
+                       {
+                           "detail":  "All required fields present",
+                           "result":  "Pass",
+                           "name":  "Validate"
+                       },
+                       {
+                           "detail":  "Matches 4e9277d4-1fbc-f111-aaad-002248d8a892 - POSSIBLE_DUPLICATE",
+                           "result":  "PotentialDuplicate",
+                           "name":  "Duplicate Check"
+                       }
+                   ],
+        "finalStatus":  "Potential Duplicate",
+        "finalDetail":  "Aehnlich zu Nachricht 4e9277d4-1fbc-f111-aaad-002248d8a892 - wartet auf menschliche Entscheidung."
+    },
+    {
+        "index":  4,
+        "input":  {
+                      "Problem":  "Sanitaer Problem im Objekt S-01",
+                      "Street":  "Suedring 4",
+                      "ProviderMessageId":  "DEMO-417e4023",
+                      "ObjectNumber":  "S-01",
+                      "TradeLabel":  "Sanitaer",
+                      "CustomerName":  "Gewerbepark Sued",
+                      "FromAddress":  "kunde3@example.invalid",
+                      "TradeValue":  209710501,
+                      "NotARequest":  true,
+                      "Subject":  "Out of Office",
+                      "Body":  "Ich bin bis naechste Woche nicht erreichbar."
+                  },
+        "stages":  [
+                       {
+                           "detail":  "hsv_inboundmessage created (71d41ee1-1fbc-f111-aaad-002248d8a892)",
+                           "result":  "Pass",
+                           "name":  "Ingest"
+                       },
+                       {
+                           "detail":  "Customer=Gewerbepark Sued, Object=S-01, Trade=Sanitaer",
+                           "result":  "Pass",
+                           "name":  "Parse"
+                       },
+                       {
+                           "detail":  "NOT_A_REQUEST",
+                           "result":  "NotRelevant",
+                           "name":  "Validate"
+                       }
+                   ],
+        "finalStatus":  "Not Relevant",
+        "finalDetail":  "Nachricht ist keine Auftragsanfrage."
+    }
+]
