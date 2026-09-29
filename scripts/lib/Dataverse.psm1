@@ -106,7 +106,19 @@ function Invoke-DataverseApi {
                 UseBasicParsing = $true
             }
             if ($null -ne $Body) {
-                $params['Body'] = ($Body | ConvertTo-Json -Depth 20 -Compress)
+                # Windows PowerShell 5.1's Invoke-WebRequest encodes a
+                # [string] -Body using the SYSTEM default codepage, not the
+                # UTF-8 declared in the Content-Type header above - setting
+                # that header via -Headers (rather than the -ContentType
+                # parameter) does not make it charset-aware. Any non-ASCII
+                # character (e.g. German "ß", "ü") silently got mangled into
+                # a single wrong byte, which Dataverse then rejected/decoded
+                # as U+FFFD. Confirmed empirically: "Schließanlage" round-
+                # tripped as "Schlie<FFFD>anlage". Fix: convert to UTF-8
+                # bytes ourselves - a byte[] -Body bypasses string encoding
+                # entirely.
+                $json = $Body | ConvertTo-Json -Depth 20 -Compress
+                $params['Body'] = [System.Text.Encoding]::UTF8.GetBytes($json)
             }
             $resp = Invoke-WebRequest @params
             if ($resp.Content) {

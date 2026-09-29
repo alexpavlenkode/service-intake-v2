@@ -27,7 +27,7 @@ $config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
 $org = $config.OrgUrl
 
-$spec = (Get-Content -Path "$PSScriptRoot\..\schema\statustransitions.yaml" -Raw) | ConvertFrom-Yaml
+$spec = (Get-Content -Path "$PSScriptRoot\..\schema\statustransitions.yaml" -Raw -Encoding UTF8) | ConvertFrom-Yaml
 
 # hsv_EntityName / hsv_AllowedTrigger local option set values, from
 # schema/tables.yaml's localOptionSets block - kept in sync manually since

@@ -65,7 +65,10 @@ $script:baseLangCode = Get-DataverseBaseLanguageCode -OrgUrl $org
 
 function Read-Yaml($relativePath) {
     $full = Join-Path $PSScriptRoot "..\schema\$relativePath"
-    return (Get-Content -Path $full -Raw) | ConvertFrom-Yaml
+    # -Encoding UTF8 required - see the matching comment in verify.ps1's
+    # Read-Yaml: without it, Get-Content -Raw mangles German special
+    # characters in these BOM-less schema files via the system codepage.
+    return (Get-Content -Path $full -Raw -Encoding UTF8) | ConvertFrom-Yaml
 }
 
 $choices       = Read-Yaml 'choices.yaml'

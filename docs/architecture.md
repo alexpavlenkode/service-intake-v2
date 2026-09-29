@@ -224,3 +224,64 @@ obvious - recorded here so nobody re-discovers them the hard way)
   sign-off in the app's settings - it's not something this assistant can
   approve for itself, even at the user's direct request relayed through
   chat. See README's Security Model section for the current state.
+- To read the *actual per-role depth* of a privilege (not just whether the
+  role has it at all - "Read WorkOrder" existing tells you nothing about
+  whether it's at User or Organization scope), use the unbound function
+  `RetrieveRolePrivilegesRole(RoleId=<guid>)`. It returns `RolePrivileges`
+  with `PrivilegeName` and `Depth` (same string enum as `AddPrivilegesRole`:
+  `Basic`/`Local`/`Deep`/`Global`). `verify.ps1` uses this to check exact
+  depth per privilege, not just presence (2026-09 hardening pass).
+
+## Critical bug: non-ASCII strings silently corrupted end-to-end (2026-09)
+
+Found while hardening `verify.ps1` to check Choice option labels exactly
+(not just existence): the global choice `hsv_Trade`'s option 209710504
+("Schließanlage") was stored in SI-DEV as `Schlie<U+FFFD>anlage` - the `ß`
+had been destroyed. Root cause was two independent, compounding bugs, both
+now fixed in `lib/Dataverse.psm1` / the various `Read-Yaml` helpers:
+
+1. **Reading**: `schema/*.yaml` files have no BOM. Windows PowerShell 5.1's
+   `Get-Content -Raw` without an explicit `-Encoding` falls back to the
+   system codepage (not UTF-8) to decode them, which corrupts every German
+   special character (`ß`, `ü`, `ö`, ...) at the moment the file is read -
+   confirmed empirically: the UTF-8 bytes for `ß` (`C3 9F`) get
+   misinterpreted as two Windows-1252 characters and then re-encoded as
+   *four* UTF-8 bytes. Every script that reads schema YAML now passes
+   `-Encoding UTF8` explicitly (`deploy.ps1`, `deploy-security.ps1`,
+   `verify.ps1`, `seed-statustransitions.ps1`).
+2. **Writing**: `Invoke-DataverseApi` passed `Invoke-WebRequest` a `[string]`
+   body. PowerShell 5.1 encodes a string `-Body` using the system codepage
+   regardless of the `Content-Type: charset=utf-8` header (setting it via
+   `-Headers` rather than the dedicated `-ContentType` parameter does not
+   make the call charset-aware) - so any non-ASCII character already
+   correctly in memory still got mangled on the wire. Fixed by converting
+   the JSON body to UTF-8 bytes ourselves
+   (`[System.Text.Encoding]::UTF8.GetBytes($json)`) before assigning it to
+   `-Body`, which bypasses PowerShell's string encoding entirely.
+
+Both bugs had to compound to produce this specific corruption, which is
+probably why it went unnoticed: labels without non-ASCII characters, and
+the one place a literal was typed directly into a `-Command` string with
+the right console codepage active, would have looked fine. Fixed live by
+re-running `UpdateOptionValue` after both fixes landed, and verified by
+writing the retrieved value to a file with `[System.IO.File]::WriteAllLines`
+and reading the raw bytes rather than trusting a terminal's rendering
+(terminal display encoding is a separate, cosmetic concern from what's
+actually stored in Dataverse or in a file on disk).
+
+## Schema-authoring gap found by the same hardening pass (2026-09)
+
+`schema/tables.yaml` has always declared `hsv_inboundmessage.hsv_Account`
+and `hsv_inboundmessage.hsv_ServiceObject` as Lookup columns ("Ergebnis der
+Zuordnung"), but `schema/relationships.yaml` never listed the corresponding
+relationships - and `deploy.ps1` creates Lookups exclusively by iterating
+`relationships.yaml` (a Lookup column has no standalone "create column"
+call in the Web API; it's always created together with its relationship).
+Net effect: those two lookups were never actually created in SI-DEV, and
+the *original* `verify.ps1` never caught it because it explicitly excluded
+Lookup-typed columns from its per-column checks. Fixed by adding
+`hsv_account_inboundmessage` and `hsv_serviceobject_inboundmessage` to
+`relationships.yaml` (both `Restrict`, matching the sibling
+`hsv_workorder` relationships to the same two tables) and creating them
+live. `verify.ps1` now checks every Lookup's existence and target
+entity too.

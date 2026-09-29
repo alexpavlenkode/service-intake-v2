@@ -34,7 +34,7 @@ $config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
 $org = $config.OrgUrl
 
-$securitySpec = (Get-Content -Path "$PSScriptRoot\..\schema\security.yaml" -Raw) | ConvertFrom-Yaml
+$securitySpec = (Get-Content -Path "$PSScriptRoot\..\schema\security.yaml" -Raw -Encoding UTF8) | ConvertFrom-Yaml
 
 # PrivilegeDepth is a string enum in the Web API ("Basic"/"Local"/"Deep"/
 # "Global"), not the numeric 1-4 shown in most human-readable docs/UI -

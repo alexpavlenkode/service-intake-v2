@@ -49,6 +49,31 @@ relationships:
     type: OneToMany
     deleteBehavior: RemoveLink
 
+  - schemaName: hsv_account_inboundmessage
+    referencedEntity: account
+    referencingEntity: hsv_inboundmessage
+    referencingAttribute: hsv_Account
+    type: OneToMany
+    deleteBehavior: Restrict
+    note: >
+      Added 2026-09 (review item 4) - tables.yaml has always declared
+      hsv_inboundmessage.hsv_Account ("Ergebnis der Zuordnung"), but this
+      relationship was missing from this file, so deploy.ps1 never actually
+      created the lookup in SI-DEV. verify.ps1 didn't catch it either -
+      the original version excluded Lookup columns from its per-column
+      checks entirely. Restrict, consistent with the sibling
+      hsv_account_workorder/hsv_account_serviceobject relationships.
+
+  - schemaName: hsv_serviceobject_inboundmessage
+    referencedEntity: hsv_serviceobject
+    referencingEntity: hsv_inboundmessage
+    referencingAttribute: hsv_ServiceObject
+    type: OneToMany
+    deleteBehavior: Restrict
+    note: >
+      Added 2026-09 (review item 4) - same gap as hsv_account_inboundmessage
+      above, for hsv_inboundmessage.hsv_ServiceObject.
+
   - schemaName: hsv_inboundmessage_duplicateof
     referencedEntity: hsv_inboundmessage
     referencingEntity: hsv_inboundmessage
