@@ -37,6 +37,7 @@ $ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $PSC
 if (-not $ConfigPath) { $ConfigPath = Join-Path $ScriptDir 'config.psd1' }
 
 Import-Module (Join-Path $ScriptDir 'lib\Dataverse.psm1') -Force
+Import-Module (Join-Path $ScriptDir 'lib\EmailGenerator.psm1') -Force
 
 $config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
@@ -45,7 +46,8 @@ $org = $config.OrgUrl
 # --- Demo master data (idempotent - reused across runs, same as demo-pipeline.ps1) ---
 function Get-OrCreateDemoAccount {
     param([string] $Name)
-    $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "accounts?`$select=accountid&`$filter=name eq 'DEMO $Name'"
+    $safeName = Format-ODataFilterValue "DEMO $Name"
+    $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "accounts?`$select=accountid&`$filter=name eq '$safeName'"
     if ($existing.value.Count -gt 0) { return $existing.value[0].accountid }
     $headers = @{ Authorization = "Bearer $(Get-DataverseToken -OrgUrl $org)"; Accept='application/json'; 'OData-MaxVersion'='4.0'; 'OData-Version'='4.0'; 'Content-Type'='application/json'; Prefer='return=representation' }
     $r = Invoke-WebRequest -Uri "$org/api/data/v9.2/accounts" -Method Post -Headers $headers -Body (@{ name = "DEMO $Name" } | ConvertTo-Json) -UseBasicParsing
@@ -54,20 +56,14 @@ function Get-OrCreateDemoAccount {
 
 function Get-OrCreateDemoServiceObject {
     param([string] $AccountId, [string] $ObjectNumber, [string] $Street)
-    $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_serviceobjects?`$select=hsv_serviceobjectid&`$filter=hsv_objectnumber eq '$ObjectNumber'"
+    $safeObjectNumber = Format-ODataFilterValue $ObjectNumber
+    $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_serviceobjects?`$select=hsv_serviceobjectid&`$filter=hsv_objectnumber eq '$safeObjectNumber'"
     if ($existing.value.Count -gt 0) { return $existing.value[0].hsv_serviceobjectid }
     $headers = @{ Authorization = "Bearer $(Get-DataverseToken -OrgUrl $org)"; Accept='application/json'; 'OData-MaxVersion'='4.0'; 'OData-Version'='4.0'; 'Content-Type'='application/json'; Prefer='return=representation' }
     $body = @{ hsv_name = "DEMO Object $ObjectNumber"; 'hsv_Account@odata.bind' = "/accounts($AccountId)"; hsv_objectnumber = $ObjectNumber; hsv_street = $Street; hsv_postalcode = '04109'; hsv_city = 'Leipzig' }
     $r = Invoke-WebRequest -Uri "$org/api/data/v9.2/hsv_serviceobjects" -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -UseBasicParsing
     return ($r.Content | ConvertFrom-Json).hsv_serviceobjectid
 }
-
-$Trades = @(
-    @{ Value = 209710501; Label = 'Sanitaer' }
-    @{ Value = 209710502; Label = 'Elektro' }
-    @{ Value = 209710503; Label = 'Heizung' }
-    @{ Value = 209710505; Label = 'Sonstiges' }
-)
 
 $NotARequestWords = @('out of office', 'abwesend', 'urlaub', 'unsubscribe', 'newsletter', 'werbung', 'spam', 'gewinnspiel')
 
@@ -170,41 +166,12 @@ function Invoke-RealMessage {
     return @{ stages = $stages; finalStatus = 'Converted'; finalClass = 'pass'; finalDetail = "Work Order $woId - bereit fuer Zuweisung."; inboundId = $inboundId; woId = $woId }
 }
 
-# --- Random message generator (same spirit as demo-pipeline.ps1) -----------
-$Customers = @(
-    @{ Name = 'Hausverwaltung Nord'; ObjectNumber = 'N-01'; Street = 'Ludwigstr. 12' }
-    @{ Name = 'Gewerbepark Sued'; ObjectNumber = 'S-01'; Street = 'Suedring 4' }
-)
-$Problems = @(
-    'Die Heizung im Flur funktioniert seit gestern nicht mehr.'
-    'Wasserhahn in der Kueche tropft staendig, bitte reparieren.'
-    'Die Lichtschalter im Treppenhaus loesen nicht mehr aus.'
-)
-$lastMessages = New-Object System.Collections.Generic.List[hashtable]
-
-function New-RandomMessage {
-    $roll = Get-Random -Minimum 0.0 -Maximum 1.0
-    $cust = $Customers[(Get-Random -Minimum 0 -Maximum $Customers.Count)]
-    $trade = $Trades[(Get-Random -Minimum 0 -Maximum $Trades.Count)]
-    $problem = $Problems[(Get-Random -Minimum 0 -Maximum $Problems.Count)]
-
-    if ($roll -lt 0.15 -and $lastMessages.Count -gt 0) {
-        return $lastMessages[(Get-Random -Minimum 0 -Maximum $lastMessages.Count)]
-    }
-    if ($roll -lt 0.30 -and $lastMessages.Count -gt 0) {
-        $prev = $lastMessages[$lastMessages.Count - 1]
-        return @{ From = "andere$(Get-Random -Maximum 999)@beispiel.de"; Subject = $prev.Subject; Body = $prev.Body + ' '; CustomerName = $prev.CustomerName; ObjectNumber = $prev.ObjectNumber; Street = $prev.Street; TradeValue = $prev.TradeValue }
-    }
-    if ($roll -lt 0.42) {
-        return @{ From = "kunde$(Get-Random -Maximum 999)@beispiel.de"; Subject = 'Info'; Body = 'Bin diese Woche im Urlaub.'; CustomerName = $cust.Name; ObjectNumber = $cust.ObjectNumber; Street = $cust.Street; TradeValue = $trade.Value }
-    }
-    if ($roll -lt 0.54) {
-        return @{ From = "kunde$(Get-Random -Maximum 999)@beispiel.de"; Subject = ''; Body = ''; CustomerName = ''; ObjectNumber = ''; Street = ''; TradeValue = $trade.Value }
-    }
-    $msg = @{ From = "kunde$(Get-Random -Maximum 999)@beispiel.de"; Subject = "Reparaturanfrage $($cust.Name)"; Body = $problem; CustomerName = $cust.Name; ObjectNumber = $cust.ObjectNumber; Street = $cust.Street; TradeValue = $trade.Value }
-    $lastMessages.Add($msg)
-    return $msg
-}
+# --- Random message generator: scripts\lib\EmailGenerator.psm1 -------------
+# Was a 3-customer/3-problem inline generator - moved to a shared module with
+# real template variety (10 customers, 8-10 complaint bodies per trade,
+# varied greetings/closings) so 100 generated messages don't read as an
+# obvious repeated loop. Shared with demo-pipeline.ps1's -Random mode.
+$script:generatedMessages = New-Object System.Collections.Generic.List[hashtable]
 
 # --- HTTP server -------------------------------------------------------------
 $pageTemplate = Get-Content -Path (Join-Path $ScriptDir 'live-console-page.html') -Raw -Encoding UTF8
@@ -241,10 +208,14 @@ try {
             elseif ($req.HttpMethod -eq 'POST' -and $req.Url.AbsolutePath -eq '/api/random') {
                 $reader = New-Object System.IO.StreamReader($req.InputStream, $req.ContentEncoding)
                 $body = $reader.ReadToEnd() | ConvertFrom-Json
-                $count = [Math]::Max(1, [Math]::Min(20, [int]$body.count))
+                $count = [Math]::Max(1, [Math]::Min(200, [int]$body.count))
                 $results = New-Object System.Collections.Generic.List[object]
+                $cleanCount = 0
                 for ($i = 0; $i -lt $count; $i++) {
-                    $m = New-RandomMessage
+                    $scenario = Get-ScenarioForIndex -Index $i -PreviousCleanCount $cleanCount
+                    $m = New-RealisticMessage -Scenario $scenario -PreviousMessages $script:generatedMessages
+                    if ($m.Scenario -eq 'clean') { $cleanCount++ }
+                    $script:generatedMessages.Add($m)
                     $r = Invoke-RealMessage -Msg $m
                     $r['input'] = $m
                     $results.Add($r)

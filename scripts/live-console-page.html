@@ -114,7 +114,7 @@
 
       <h2 style="margin-top:22px"><span class="dot" style="background:var(--info);box-shadow:0 0 8px var(--info)"></span>Automatischer Test</h2>
       <div class="auto-row">
-        <input type="number" id="fCount" value="3" min="1" max="20">
+        <input type="number" id="fCount" value="3" min="1" max="200">
         <button class="btn btn-auto" id="btnAuto">Zufaellige Nachrichten senden</button>
       </div>
     </div>
@@ -236,17 +236,30 @@ document.getElementById('fBody').addEventListener('keydown', e => { if (e.key ==
 
 document.getElementById('btnAuto').addEventListener('click', async () => {
   if (sending) return;
-  const n = Math.max(1, Math.min(20, parseInt(document.getElementById('fCount').value, 10) || 1));
+  const n = Math.max(1, Math.min(200, parseInt(document.getElementById('fCount').value, 10) || 1));
+  const btn = document.getElementById('btnAuto');
+  const origLabel = btn.textContent;
   setBusy(true);
+  btn.textContent = n > 10 ? `Sende ${n} Nachrichten an SI-DEV ...` : origLabel;
   try {
     const results = await apiRandom(n);
+    // Full flight animation only makes sense to watch for small batches;
+    // for a real load test (50-200) just stream results into the log fast.
+    const animate = n <= 10;
     for (const r of results) {
       history.push({ input: r.input, stages: r.stages, finalStatus: r.finalStatus, finalClass: r.finalClass, finalDetail: r.finalDetail });
-      await animateResult(r);
+      if (animate) { await animateResult(r); await sleep(150); }
       renderLog();
-      await sleep(150);
+    }
+    if (!animate) {
+      const counts = {};
+      results.forEach(r => counts[r.finalStatus] = (counts[r.finalStatus] || 0) + 1);
+      const banner = document.getElementById('outcome');
+      banner.className = 'outcome-banner show pass';
+      banner.innerHTML = `<b>${n} Nachrichten verarbeitet</b><span class="desc">${Object.entries(counts).map(([k,v]) => `${v}x ${k}`).join(', ')}</span>`;
     }
   } catch (e) { showError('Fehler: ' + e.message); }
+  btn.textContent = origLabel;
   setBusy(false);
 });
 

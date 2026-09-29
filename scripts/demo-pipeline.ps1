@@ -39,6 +39,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Import-Module "$PSScriptRoot\lib\Dataverse.psm1" -Force
+Import-Module "$PSScriptRoot\lib\EmailGenerator.psm1" -Force
 
 $config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
@@ -76,7 +77,8 @@ function Animate-Stage {
 # --- Demo master data (idempotent - reused across runs) --------------------
 function Get-OrCreateDemoAccount {
     param([string] $Name)
-    $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "accounts?`$select=accountid&`$filter=name eq 'DEMO $Name'"
+    $safeName = Format-ODataFilterValue "DEMO $Name"
+    $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "accounts?`$select=accountid&`$filter=name eq '$safeName'"
     if ($existing.value.Count -gt 0) { return $existing.value[0].accountid }
     $headers = @{ Authorization = "Bearer $(Get-DataverseToken -OrgUrl $org)"; Accept='application/json'; 'OData-MaxVersion'='4.0'; 'OData-Version'='4.0'; 'Content-Type'='application/json'; Prefer='return=representation' }
     $r = Invoke-WebRequest -Uri "$org/api/data/v9.2/accounts" -Method Post -Headers $headers -Body (@{ name = "DEMO $Name" } | ConvertTo-Json) -UseBasicParsing
@@ -85,19 +87,14 @@ function Get-OrCreateDemoAccount {
 
 function Get-OrCreateDemoServiceObject {
     param([string] $AccountId, [string] $ObjectNumber, [string] $Street)
-    $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_serviceobjects?`$select=hsv_serviceobjectid&`$filter=hsv_objectnumber eq '$ObjectNumber'"
+    $safeObjectNumber = Format-ODataFilterValue $ObjectNumber
+    $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_serviceobjects?`$select=hsv_serviceobjectid&`$filter=hsv_objectnumber eq '$safeObjectNumber'"
     if ($existing.value.Count -gt 0) { return $existing.value[0].hsv_serviceobjectid }
     $headers = @{ Authorization = "Bearer $(Get-DataverseToken -OrgUrl $org)"; Accept='application/json'; 'OData-MaxVersion'='4.0'; 'OData-Version'='4.0'; 'Content-Type'='application/json'; Prefer='return=representation' }
     $body = @{ hsv_name = "DEMO Object $ObjectNumber"; 'hsv_Account@odata.bind' = "/accounts($AccountId)"; hsv_objectnumber = $ObjectNumber; hsv_street = $Street; hsv_postalcode = '04109'; hsv_city = 'Leipzig' }
     $r = Invoke-WebRequest -Uri "$org/api/data/v9.2/hsv_serviceobjects" -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -UseBasicParsing
     return ($r.Content | ConvertFrom-Json).hsv_serviceobjectid
 }
-
-$DemoCustomers = @(
-    @{ Name = 'Hausverwaltung Nord';  ObjectNumber = 'N-01'; Street = 'Ludwigstr. 12' }
-    @{ Name = 'Hausverwaltung Nord';  ObjectNumber = 'N-02'; Street = 'Ludwigstr. 30' }
-    @{ Name = 'Gewerbepark Sued';     ObjectNumber = 'S-01'; Street = 'Suedring 4' }
-)
 
 $Trades = @(
     @{ Value = 209710501; Label = 'Sanitaer' }
@@ -310,49 +307,31 @@ if ($Interactive) {
         NotARequest = $false
     })
 } else {
-    $scenarios = @('clean', 'clean', 'missing_field', 'potential_duplicate', 'technical_duplicate', 'not_a_request')
-    $lastCleanKey = $null
+    # Realistic content (varied customers, complaint bodies, tone) comes from
+    # the shared module - was a 3-customer/3-problem inline pool here, which
+    # made anything above ~10 messages look obviously repeated.
+    $generated = New-Object System.Collections.Generic.List[hashtable]
+    $cleanCount = 0
     for ($i = 0; $i -lt $Random; $i++) {
-        $cust = $DemoCustomers[(Get-Random -Minimum 0 -Maximum $DemoCustomers.Count)]
-        $trade = $Trades[(Get-Random -Minimum 0 -Maximum $Trades.Count)]
-        $scenario = $scenarios[(Get-Random -Minimum 0 -Maximum $scenarios.Count)]
-        $problem = "$($trade.Label) Problem im Objekt $($cust.ObjectNumber)"
+        $scenario = Get-ScenarioForIndex -Index $i -PreviousCleanCount $cleanCount
+        $rm = New-RealisticMessage -Scenario $scenario -PreviousMessages $generated
+        if ($rm.Scenario -eq 'clean') { $cleanCount++ }
+        $generated.Add($rm)
+
+        # 'technical_duplicate' returns the SAME hashtable reference as an
+        # earlier generated message (by design, see EmailGenerator.psm1), so
+        # if that earlier iteration already stamped an AssignedProviderId on
+        # it, reusing it here is what actually exercises the alternate key.
+        $providerMessageId = if ($rm.AssignedProviderId) { $rm.AssignedProviderId } else { "DEMO-$([guid]::NewGuid().ToString().Substring(0,8))" }
+        $rm['AssignedProviderId'] = $providerMessageId
 
         $msg = @{
-            FromAddress = "kunde$i@example.invalid"
-            Subject = "Reparaturanfrage: $($trade.Label)"
-            Body = $problem
-            CustomerName = $cust.Name
-            ObjectNumber = $cust.ObjectNumber
-            Street = $cust.Street
-            Problem = $problem
-            TradeValue = $trade.Value
-            TradeLabel = $trade.Label
-            ProviderMessageId = "DEMO-$([guid]::NewGuid().ToString().Substring(0,8))"
-            NotARequest = $false
-        }
-
-        switch ($scenario) {
-            'missing_field' { $msg.ObjectNumber = $null }
-            'not_a_request' { $msg.NotARequest = $true; $msg.Subject = 'Out of Office'; $msg.Body = 'Ich bin bis naechste Woche nicht erreichbar.' }
-            'technical_duplicate' {
-                if ($lastCleanKey) { $msg.ProviderMessageId = $lastCleanKey }
-            }
-            'potential_duplicate' {
-                # Same customer/object/problem as a previous clean message -> business-key match, different provider id.
-                if ($lastCleanKey) {
-                    $msg.CustomerName = $script:lastCleanCustomer
-                    $msg.ObjectNumber = $script:lastCleanObject
-                    $msg.Problem = $script:lastCleanProblem
-                    $msg.Body = $script:lastCleanProblem
-                }
-            }
-        }
-        if ($scenario -eq 'clean') {
-            $lastCleanKey = $msg.ProviderMessageId
-            $script:lastCleanCustomer = $msg.CustomerName
-            $script:lastCleanObject = $msg.ObjectNumber
-            $script:lastCleanProblem = $msg.Problem
+            FromAddress = $rm.From; Subject = $rm.Subject; Body = $rm.Body
+            CustomerName = $rm.CustomerName; ObjectNumber = $rm.ObjectNumber; Street = $rm.Street
+            Problem = $rm.Body
+            TradeValue = $rm.TradeValue; TradeLabel = $rm.TradeLabel
+            ProviderMessageId = $providerMessageId
+            NotARequest = ($scenario -eq 'not_a_request')
         }
         $messages.Add($msg)
     }

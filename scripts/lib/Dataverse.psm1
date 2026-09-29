@@ -183,4 +183,29 @@ function ConvertTo-DataverseDisplayName {
     return ($bare -creplace '([a-z0-9])([A-Z])', '$1 $2')
 }
 
-Export-ModuleMember -Function Connect-DataverseOrg, Get-DataverseToken, Invoke-DataverseApi, Get-DataverseBaseLanguageCode, New-DataverseLabel, New-DataverseRequiredLevel, ConvertTo-DataverseDisplayName
+function Format-ODataFilterValue {
+    <#
+        Makes an arbitrary string safe to embed inside an OData $filter
+        string literal built via plain string interpolation (as every
+        script in this project does, rather than a query builder library).
+
+        Two independent problems, both real (hit live: a customer name with
+        "&" broke the query outright with a cryptic 400 "query parameter not
+        supported" - "&" is the query-string parameter separator, so an
+        unescaped one splits the URL wherever it appears):
+          1. OData string literal syntax: a literal single quote inside the
+             value must be doubled ('' ), or it closes the string early.
+          2. URL encoding: the whole query string segment must be percent-
+             encoded, or characters like &, #, %, space break URL parsing
+             before the request even reaches OData.
+
+        Order matters: double the quotes FIRST (so the server's OData parser
+        sees the escaping after url-decoding), then percent-encode the
+        result.
+    #>
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Value)
+    $odataEscaped = $Value -replace "'", "''"
+    return [System.Uri]::EscapeDataString($odataEscaped)
+}
+
+Export-ModuleMember -Function Connect-DataverseOrg, Get-DataverseToken, Invoke-DataverseApi, Get-DataverseBaseLanguageCode, New-DataverseLabel, New-DataverseRequiredLevel, ConvertTo-DataverseDisplayName, Format-ODataFilterValue
