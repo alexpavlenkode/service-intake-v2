@@ -1,6 +1,6 @@
 ﻿# Row-Level Security Access Test
 
-Run: 2026-09-29 00:52 (local)
+Run: 2026-09-29 21:25 (local)
 
 **Setup note**: SI-DEV is a Developer Plan environment with exactly one
 licensed interactive human user. A second real browser session isn't
@@ -11,9 +11,9 @@ privilege-evaluation path Dataverse uses for every caller - it does
 NOT demonstrate an actual second browser hitting a direct record URL,
 since no second license exists to do that with.
 
-[INFO] Test Account created: e7e75951-8fbb-f111-aaad-002248d8a892
-[INFO] Test Service Object created: e8e75951-8fbb-f111-aaad-002248d8a892
-[INFO] Test Work Order created: e9e75951-8fbb-f111-aaad-002248d8a892 (owned by System Administrator, owner A)
+[INFO] Test Account created: 3ac01388-3bbc-f111-aaad-002248d8a892
+[INFO] Test Service Object created: 3bc01388-3bbc-f111-aaad-002248d8a892
+[INFO] Test Work Order created: 3cc01388-3bbc-f111-aaad-002248d8a892 (owned by System Administrator, owner A)
 
 ## Before reassignment (Work Order owned by Owner A)
 
@@ -25,6 +25,11 @@ since no second license exists to do that with.
 
 [INFO] Owner changed to Techniker B.
 [PASS] Techniker B can now read the work order by GUID after becoming its owner.
+
+## Status transitions, as Techniker B (now the owner)
+
+[PASS] Techniker B (owner) can perform the valid transition Neu -> Zugewiesen on their own record.
+[PASS] Invalid transition Zugewiesen -> Abgeschlossen correctly blocked for the owning Techniker (business rule, not an access-rights error).
 
 **Note on 'access disappears for Owner A'**: the caller used to create
 and own this record (Alex) is System Administrator, with Organization-

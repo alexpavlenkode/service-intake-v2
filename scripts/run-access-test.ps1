@@ -34,6 +34,19 @@
              the inferred Assign privilege - see schema/security.yaml).
           6. As Techniker B: GET the same work order by GUID again - expect
              success this time.
+          6b. As Techniker B (now owner): perform the valid transition
+              Neu -> Zugewiesen - expect success. This specifically caught a
+              real bug: CanTransitionPlugin originally queried
+              hsv_statustransition as the calling user, and Techniker has
+              zero privileges on that table - so even a VALID transition by
+              the record's own owner failed with an access-rights error
+              before the plugin could evaluate the actual rule. Fixed by
+              running that internal lookup as SYSTEM (see
+              docs/architecture.md).
+          6c. As Techniker B: attempt the invalid transition
+              Zugewiesen -> Abgeschlossen (skipping In Arbeit) - expect it
+              blocked for the business rule (INVALID_TRANSITION), not an
+              access-rights error.
           7. Clean up the test data (Account/hsv_serviceobject/hsv_workorder
              - plain records, not metadata, so deletion is fine here).
 
@@ -174,6 +187,31 @@ try {
     }
 } catch {
     Log "[FAIL] Techniker B still denied after becoming owner: $($_.Exception.Message)"
+}
+
+# --- 6b. As Techniker B (now owner): valid transition Neu -> Zugewiesen --
+Log ""
+Log "## Status transitions, as Techniker B (now the owner)"
+Log ""
+try {
+    Invoke-DataverseApi -OrgUrl $org -Method PATCH -Path "hsv_workorders($woId)" -Body @{ hsv_status = 209710102 } -CallerObjectId $callerObjectId | Out-Null
+    Log "[PASS] Techniker B (owner) can perform the valid transition Neu -> Zugewiesen on their own record."
+} catch {
+    Log "[FAIL] Valid transition Neu -> Zugewiesen was blocked for the owning Techniker: $($_.Exception.Message)"
+    Log "       (If this says 'missing prvReadhsv_StatusTransition privilege', CanTransitionPlugin is"
+    Log "       querying hsv_statustransition as the caller instead of as SYSTEM - see docs/architecture.md.)"
+}
+
+# --- 6c. As Techniker B: invalid transition Zugewiesen -> Abgeschlossen --
+try {
+    Invoke-DataverseApi -OrgUrl $org -Method PATCH -Path "hsv_workorders($woId)" -Body @{ hsv_status = 209710104 } -CallerObjectId $callerObjectId | Out-Null
+    Log "[FAIL] Invalid transition Zugewiesen -> Abgeschlossen (skipping In Arbeit) was NOT blocked."
+} catch {
+    if ($_.Exception.Message -match 'INVALID_TRANSITION') {
+        Log "[PASS] Invalid transition Zugewiesen -> Abgeschlossen correctly blocked for the owning Techniker (business rule, not an access-rights error)."
+    } else {
+        Log "[FAIL] Blocked, but not for the expected reason: $($_.Exception.Message)"
+    }
 }
 
 Log ""

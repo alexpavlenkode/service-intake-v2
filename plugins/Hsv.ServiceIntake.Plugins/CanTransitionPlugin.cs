@@ -124,8 +124,22 @@ namespace Hsv.ServiceIntake.Plugins
                     $"hsv_status pre-image value {oldStatusValue} on {context.PrimaryEntityName} is not a recognized status. Reason: UNKNOWN_STATUS_VALUE.");
             }
 
+            // Deliberately CreateOrganizationService(null) - runs as SYSTEM,
+            // not context.UserId. hsv_statustransition is configuration data
+            // the security model gives Techniker zero access to ("kein
+            // Zugriff" - schema/security.yaml); querying it as the calling
+            // user meant a Techniker could never successfully transition
+            // their OWN work order, valid transition or not - the plugin's
+            // internal rule lookup would 403 before it ever got to evaluate
+            // the rule. Confirmed live: HTTP 403,
+            // "missing prvReadhsv_StatusTransition privilege", on a
+            // Neu -> Zugewiesen transition by the record's own owner.
+            // This does not expose hsv_statustransition's contents to the
+            // caller - it's used only internally to decide allow/deny, and
+            // the actual Update being validated still runs under the
+            // caller's own privileges (this plugin never writes anything).
             var service = ((IOrganizationServiceFactory)serviceProvider.GetService(typeof(IOrganizationServiceFactory)))
-                .CreateOrganizationService(context.UserId);
+                .CreateOrganizationService(null);
 
             var query = new QueryExpression(StatusTransitionEntity)
             {

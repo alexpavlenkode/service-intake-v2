@@ -7,12 +7,20 @@
 #
 # ASSUMPTIONS FLAGGED FOR DECISION (see docs/discovery-report.md /
 # docs/architecture.md - neither source doc specifies these explicitly):
-#   - DateTimeBehavior: system/audit-relevant timestamps (receivedon,
-#     decidedon, nextreviewon, startedon, completedon, assignedon,
-#     workorder.completedon) default to TimeZoneIndependent so retention and
-#     SLA math (§9, §11) don't shift with a user's timezone or DST. duedate
-#     stays UserLocal since it's a human-facing appointment time. Confirm
-#     before Phase B if this doesn't match intent.
+#   - DateTimeBehavior: ALL DateTime columns here are UserLocal. An earlier
+#     version of this file defaulted the "system" timestamps to
+#     TimeZoneIndependent on the theory that it would keep retention/SLA math
+#     stable - that reasoning was backwards. TimeZoneIndependent means the
+#     stored value is shown IDENTICALLY to every viewer regardless of their
+#     own timezone (it's for things like "daily opening time: 09:00", not a
+#     moment in time). Every field here (ReceivedOn, AssignedOn, StartedOn,
+#     CompletedOn, DecidedOn, NextReviewOn) records the actual instant an
+#     event happened - a Disponent in Leipzig and a Plattformbetreuer
+#     somewhere else must see it correctly converted to their own local
+#     time, which is exactly what UserLocal does. Migrated live via PUT to
+#     each attribute (Dataverse blocks PATCH here, see architecture.md) with
+#     empty tables (no data to reinterpret) - a schema note, not a
+#     methodology anyone needs to repeat.
 #   - hsv_statustransition.hsv_allowedtrigger: docs/03-datenmodell.md §3.5
 #     names the column but never enumerates its values ("Welcher Auslöser
 #     darf das"). Placeholder values below are a reasonable guess from
@@ -121,12 +129,12 @@ tables:
         description: Auslösende Nachricht.
       - schemaName: hsv_AssignedOn
         type: DateTime
-        dateTimeBehavior: TimeZoneIndependent
+        dateTimeBehavior: UserLocal
         requiredLevel: None
         description: Gesetzt durch Statusübergang, nicht manuell.
       - schemaName: hsv_CompletedOn
         type: DateTime
-        dateTimeBehavior: TimeZoneIndependent
+        dateTimeBehavior: UserLocal
         requiredLevel: None
         description: Gesetzt durch Statusübergang, nicht manuell.
       - schemaName: hsv_DueDate
@@ -170,7 +178,7 @@ tables:
         description: GUID, verbindet alle Verarbeitungsschritte.
       - schemaName: hsv_ReceivedOn
         type: DateTime
-        dateTimeBehavior: TimeZoneIndependent
+        dateTimeBehavior: UserLocal
         requiredLevel: Required
         description: Zeitpunkt des Eingangs, nicht der Verarbeitung.
       - schemaName: hsv_FromAddress
@@ -245,7 +253,7 @@ tables:
         requiredLevel: None
       - schemaName: hsv_DecidedOn
         type: DateTime
-        dateTimeBehavior: TimeZoneIndependent
+        dateTimeBehavior: UserLocal
         requiredLevel: None
       - schemaName: hsv_ExtractionSource
         type: Choice
@@ -258,7 +266,7 @@ tables:
         description: Standard "ja" bei KI-Extraktion.
       - schemaName: hsv_NextReviewOn
         type: DateTime
-        dateTimeBehavior: TimeZoneIndependent
+        dateTimeBehavior: UserLocal
         requiredLevel: None
         description: Wiedervorlage aus der Klärungsqueue.
       - schemaName: hsv_RetryCount
@@ -333,11 +341,11 @@ tables:
         requiredLevel: Required
       - schemaName: hsv_StartedOn
         type: DateTime
-        dateTimeBehavior: TimeZoneIndependent
+        dateTimeBehavior: UserLocal
         requiredLevel: Required
       - schemaName: hsv_CompletedOn
         type: DateTime
-        dateTimeBehavior: TimeZoneIndependent
+        dateTimeBehavior: UserLocal
         requiredLevel: None
     alternateKey:
       schemaName: hsv_ProcessingAttempt_Correlation
