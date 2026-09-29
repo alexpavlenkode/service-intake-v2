@@ -109,6 +109,7 @@ The solution is exported and unpacked at `solution/HSVServiceIntakeV2.zip`
   user directly in `.claude/settings.local.json` (not something the
   assistant could add on its own) before it could proceed.
   The pre-existing V1 role `SI Auditor` was confirmed untouched throughout.
+
 **`scripts/verify.ps1` passes 94/94 checks.** Organization-level auditing was
 turned on at the user's explicit request (`organizations.isauditenabled =
 true`, a plain data-record update, not a metadata/security change) -
