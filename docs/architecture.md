@@ -5,37 +5,68 @@ covered by `docs/01-prozessbeschreibung.md` / `docs/03-datenmodell.md`
 (those two remain the source of truth and are never edited). It also carries
 the tradeoff discussion the project prompt asks for in §12.
 
-## Future: the `CanTransition` mechanism (design only - not implemented)
+## The `CanTransition` mechanism - implemented as a C# plugin
 
-Required by the original prompt (§5, Phase B) as a description, explicitly
-*not* an implementation - it "gehört zur nächsten Phase und kann ohne Flows
-nicht geprüft werden" (belongs to a later phase and can't be verified
-without flows). `hsv_statustransition` now holds the actual configuration
-data (23 rows, see `schema/statustransitions.yaml`); this section describes
-the mechanism intended to consume it.
+Originally scoped (§5, Phase B of the prompt) as design-only - "gehört zur
+nächsten Phase und kann ohne Flows nicht geprüft werden" (belongs to a later
+phase, can't be verified without flows). Implemented later, at the user's
+explicit request, as `Hsv.ServiceIntake.Plugins.CanTransitionPlugin`
+(`plugins/Hsv.ServiceIntake.Plugins/`) rather than a flow - a **plugin**
+was chosen deliberately over a Power Automate child flow or a Power Fx
+low-code plugin, because it runs inside Dataverse's own transaction
+pipeline: no channel (model-driven UI, Web API, a flow, a future integration)
+can write an invalid status without going through it. A flow-based check can
+always be bypassed by a direct API write; this can't.
 
-- A single reusable check, conceptually `CanTransition(entityName,
-  fromStatus, toStatus, trigger)`, queries `hsv_statustransition` for a row
-  where `hsv_entityname`, `hsv_fromstatus`, `hsv_tostatus` and
-  `hsv_allowedtrigger` match and `hsv_isactive = true`.
-- Every automation that would change `hsv_workorder.hsv_status` or
-  `hsv_inboundmessage.hsv_status` calls this check **before** writing the
-  new status, not after - the write only happens if a matching active row
-  exists.
-- If no row matches, the write is skipped and a `hsv_processingattempt` row
-  is logged with `hsv_result = Skipped`, `hsv_reasoncode = INVALID_TRANSITION`
-  (already defined in `schema/choices.yaml`) - this is the "skipped – invalid
-  transition" behavior `docs/01-prozessbeschreibung.md` §5.3 requires for a
-  work order that's already been assigned and gets hit by a duplicate
-  trigger.
-- Because the check is one shared function/flow rather than branch logic
-  copy-pasted into every automation that can move a status, the rules live
-  in exactly one place - `hsv_statustransition` - and changing them later
-  means editing data, not finding every flow that has an opinion about
-  status transitions (see the tradeoff discussion below).
-- Not buildable or testable in this project as it stands: it requires the
-  Power Automate / flow layer, which is out of scope for both the Data
-  Model and Security Model phases completed so far.
+**How it works:**
+
+- Registered as a **Pre-Operation** step on `Update` of `hsv_workorder` and
+  `hsv_inboundmessage`, filtered to fire only when `hsv_status` is part of
+  the update (`filteringattributes = hsv_status`), with a Pre-Image
+  (`hsv_status`) so the plugin can see the record's *current* status, not
+  just the one being written.
+- If the new status differs from the pre-image status, it queries
+  `hsv_statustransition` for an active row matching
+  `(hsv_entityname, hsv_fromstatus, hsv_tostatus)`. `hsv_fromstatus`/
+  `hsv_tostatus` are stored as text labels (`"Neu"`, `"Zugewiesen"`, ...),
+  not the numeric choice value, so the plugin hardcodes a numeric-value →
+  label map per entity (`schema/choices.yaml`'s own documented, frozen
+  values) to translate the `OptionSetValue` it receives into the label the
+  transition table actually stores.
+- No matching active row → `InvalidPluginExecutionException`, which aborts
+  the whole transaction. Verified with a direct Web API `PATCH` (bypassing
+  any UI or flow) in `tests/cantransition-report.md` /
+  `scripts/test-cantransition.ps1`: `Neu → Abgeschlossen` and
+  `Received → Converted` are both rejected outright; `Neu → Zugewiesen` and
+  `Received → Parsed` both succeed.
+- **Deliberately not enforced**: `hsv_allowedtrigger`. That column's values
+  are an unconfirmed placeholder (flagged at the top of
+  `schema/tables.yaml` - neither source doc enumerates them). Enforcing an
+  unconfirmed rule in code that blocks production writes would be worse
+  than not enforcing it; only the from/to transition itself is validated.
+  Confirm the trigger values with the source-of-truth docs before adding
+  that check.
+- **Deliberately not this plugin's job**: logging a `hsv_processingattempt`
+  row with `Result = Skipped` / `ReasonCode = INVALID_TRANSITION` for a
+  blocked attempt (`docs/01-prozessbeschreibung.md` §5.3's "skipped –
+  invalid transition" behavior). A Pre-Operation step that's about to fail
+  the whole transaction shouldn't also try to commit a separate log write
+  in the same breath - that's the calling flow's job, once the flow layer
+  exists: catch this plugin's exception, then log it.
+
+**Build/registration mechanics** (`plugins/Hsv.ServiceIntake.Plugins/`,
+`scripts/register-plugin.ps1`): targets `net462` - Dataverse's plugin
+sandbox only loads .NET Framework assemblies, not .NET Core/5+, so this is
+the one piece of the project that needed the .NET Framework 4.6.2 Developer
+Pack rather than just the .NET SDK. Dataverse's `pluginassemblies` API
+rejects an unsigned assembly outright ("Public assembly must have public key
+token") - the project's `.snk` strong-name key is committed (not a security
+secret, just an assembly identity token; regenerating it on every redeploy
+would just churn the assembly's identity for no benefit). Registration
+itself (assembly content, plugin type, processing step, pre-image) goes
+through the same `Invoke-DataverseApi` helper as everything else in this
+project, not the Plugin Registration Tool - consistent with the project's
+"everything scripted, nothing manual" approach.
 
 ## Resolved discrepancy: solution name
 
@@ -117,8 +148,8 @@ decides, with the match reason shown and the decision recorded
 logic means the rule is duplicated in every flow that can move a status, and
 changing it later means finding and editing all of them. A configuration
 table makes the state machine data instead of code: one place to read it,
-one place to change it, and a single `CanTransition` check (next phase) can
-enforce it everywhere instead of every flow author having to remember the
+one place to change it, and a single `CanTransition` check (now a plugin -
+see above) can enforce it everywhere instead of every flow author having to remember the
 rules. It also gives the audit trail a concrete `INVALID_TRANSITION` reason
 code instead of an inconsistent per-flow error message.
 

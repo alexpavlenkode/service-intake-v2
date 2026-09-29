@@ -23,3 +23,11 @@ Thumbs.db
 
 # Local Claude Code permission overrides - machine-specific, not shared
 .claude/settings.local.json
+
+# .NET build output - rebuilt by `dotnet build -c Release`, not tracked.
+# The .snk strong-name key IS tracked (see plugins/*/*.snk) - it's not a
+# security secret, just an assembly identity token Dataverse's
+# pluginassemblies API requires, and committing it keeps redeploys from
+# silently changing the assembly's PublicKeyToken.
+plugins/**/bin/
+plugins/**/obj/

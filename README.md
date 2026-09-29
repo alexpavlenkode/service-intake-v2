@@ -42,6 +42,15 @@ powershell -File scripts\test-idempotency.ps1
 # 7. Export and unpack the solution once everything verifies
 pac solution export --name HSVServiceIntakeV2 --path solution\HSVServiceIntakeV2.zip --overwrite
 pac solution unpack --zipfile solution\HSVServiceIntakeV2.zip --folder solution\unpacked --packagetype Unmanaged --allowWrite true
+
+# 8. Security roles and status-transition config data
+powershell -File scripts\deploy-security.ps1 -Apply
+powershell -File scripts\seed-statustransitions.ps1 -Apply
+
+# 9. CanTransition plugin: build, register, test
+dotnet build plugins\Hsv.ServiceIntake.Plugins -c Release
+powershell -File scripts\register-plugin.ps1 -Apply
+powershell -File scripts\test-cantransition.ps1
 ```
 
 `deploy.ps1 -Apply` also accepts `-OnlyTables`, `-OnlyRelationships`, `-OnlyKeys` (arrays) to scope a run to specific components - useful for cautiously rolling out one risky change at a time. Pass arrays natively (`& .\scripts\deploy.ps1 -Apply -OnlyTables @('hsv_workorder')`) rather than through a nested `powershell -File` call with comma-separated values - the latter parses as a single string, not an array, and silently does nothing.
@@ -100,13 +109,39 @@ The solution is exported and unpacked at `solution/HSVServiceIntakeV2.zip`
   user directly in `.claude/settings.local.json` (not something the
   assistant could add on its own) before it could proceed.
   The pre-existing V1 role `SI Auditor` was confirmed untouched throughout.
-- `CanTransition` validator: **not implemented**, described only
-  (`docs/architecture.md`). It requires Power Automate flows, which this
-  project's tooling (Dataverse Web API scripts) doesn't reach - a genuinely
-  different phase with different tools, not a blocked permission.
-
 **`scripts/verify.ps1` passes 94/94 checks.** Organization-level auditing was
 turned on at the user's explicit request (`organizations.isauditenabled =
 true`, a plain data-record update, not a metadata/security change) -
 table-level auditing on `hsv_workorder`/`hsv_inboundmessage` is now actually
 active, not just configured and dormant.
+
+**`CanTransition` — implemented as a C# plugin** (`plugins/Hsv.ServiceIntake.Plugins/`,
+registered via `scripts/register-plugin.ps1`). A Pre-Operation Update step on
+`hsv_workorder` and `hsv_inboundmessage` blocks any status write that isn't
+an active row in `hsv_statustransition` - enforced by Dataverse itself, so
+no channel (UI, Web API, a future flow) can bypass it, unlike a flow-only
+check. Verified with direct Web API `PATCH` calls in
+`scripts/test-cantransition.ps1` / `tests/cantransition-report.md`: both
+`Neu → Abgeschlossen` and `Received → Converted` are rejected outright;
+`Neu → Zugewiesen` and `Received → Parsed` both succeed. Not enforced:
+`hsv_allowedtrigger` (its values are an unconfirmed placeholder - see
+`docs/architecture.md`).
+
+## Reproducibility & evidence
+
+- Re-running `deploy.ps1 -Apply` against the already-deployed SI-DEV: 0
+  `CREATE`, 30 `VERIFY` - nothing manual, nothing drifts.
+- The entire Data Model + Security Model was deployed from scratch into a
+  second clean environment (SI-TEST) using the same scripts and
+  `schema/*.yaml`, only the config file's environment/URL differing - see
+  `scripts/config.si-test.psd1` and `evidence/deploy-output-SI-TEST-from-scratch.txt`.
+- `evidence/` collects the artifacts backing every claim above: verify
+  transcripts, the idempotency/access/CanTransition test reports. See
+  `evidence/README.md`.
+- Row-level security (the `HSV Techniker` role's User-depth scoping) is
+  proven, not just configured, in `tests/access-test-report.md` - via
+  `CallerObjectId` impersonation of a Dataverse Application User, since
+  SI-DEV's Developer Plan license doesn't allow a second real interactive
+  user for an actual two-browser test.
+- Repository: private on GitHub, full commit history scanned for
+  tokens/secrets before the first push (clean).
