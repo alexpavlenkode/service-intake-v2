@@ -119,6 +119,24 @@ globalChoices:
         label: INVALID_TRANSITION
       - value: 209710409
         label: RETRY_BUDGET_EXCEEDED
+      - value: 209710410
+        label: TECHNICAL_DUPLICATE
+        addedNote: >
+          Added 2026-09 (review item 27) - the one genuinely missing code:
+          hsv_processingattempt had no way to record "this delivery was
+          rejected because the ProviderMessageId already exists" (review
+          items 25/26). The review's other four suggested codes - Success,
+          ValidationFailed, RetryableError, PermanentError - were
+          deliberately NOT added as separate values: Success is already
+          hsv_Result's own option (a "reason" for a non-exceptional outcome
+          is a contradiction in terms), and RetryableError/PermanentError/
+          ValidationFailed would only duplicate the more specific reasons
+          already in this list (HTTP_429/ERP_UNAVAILABLE are the retryable
+          cases; SCHEMA_MISMATCH is a permanent-failure case;
+          MISSING_OBJECT_ADDRESS/UNKNOWN_CUSTOMER/NOT_A_REQUEST are the
+          validation-failure cases) - adding broader catch-all siblings next
+          to their own specific children would make it ambiguous which one
+          to pick when logging a new attempt.
 
   - schemaName: hsv_Trade
     displayName: Trade

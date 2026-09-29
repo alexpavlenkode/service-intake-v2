@@ -103,6 +103,46 @@ already-existing `hsv_statustransition` table exposed that gap. Fixed:
 `tables.yaml` and creates whatever's missing, the same way it already
 diffed relationships.
 
+## Technical duplicates are a new ProcessingAttempt, not a second message (review items 25-27, 2026-09)
+
+`hsv_InboundMessage_ProviderMessageId` is a unique alternate key (by
+design, for exactly this reason - Promt §9/idempotency). A repeat delivery
+of the same `ProviderMessageId` is therefore rejected by Dataverse itself
+at Create time; there is never a second `hsv_inboundmessage` row for it, so
+there was never a real record to mark `Duplicate` - the pipeline's own
+"technical duplicate" branch had been catching the rejection and logging it
+*only* into a script-local trace object that never reached Dataverse. What
+actually happened (a repeat delivery of an already-processed message) was
+invisible to anyone looking at the data afterwards.
+
+Fixed in `scripts/demo-pipeline.ps1` and `scripts/test-idempotency.ps1`:
+the rejected repeat is now logged as a **new `hsv_processingattempt` row
+against the original, already-existing message** - `AttemptNumber` is
+computed per-message (count of prior attempts + 1, via a
+`_hsv_inboundmessage_value` filter), not per-CorrelationId, since each
+delivery gets its own fresh CorrelationId but they all belong to the same
+logical message. The new row sets `Result = Skipped`,
+`ReasonCode = TECHNICAL_DUPLICATE` (new hsv_ReasonCode option, value
+209710410), and links `hsv_PreviousAttempt` back to the prior attempt, so
+`MSG-123 -> Attempt 1 (Success) -> Attempt 2 (Skipped/TECHNICAL_DUPLICATE)`
+is an actual, queryable chain, not just something visible in a terminal
+during one interactive run.
+
+`schema/choices.yaml`'s `hsv_ReasonCode` deliberately got only ONE new
+value, not the reviewer's full suggested list of five - see the
+`addedNote` on `TECHNICAL_DUPLICATE` there for why `Success`/
+`ValidationFailed`/`RetryableError`/`PermanentError` were considered and
+rejected as redundant with codes already in the list.
+
+**Deferred, not forgotten**: `scripts/serve-live-console.ps1`'s
+`Invoke-RealMessage` has the identical technical-duplicate branch but was
+NOT given the same fix here - it currently logs no `hsv_processingattempt`
+rows at all (not even for successes), which is a symptom of the exact
+"two independent pipeline implementations" problem review items 18/19
+address. Patching only the duplicate case there would leave it
+inconsistent in a different way (duplicates logged, successes not).
+Revisit once 18/19 unify both callers onto one shared pipeline module.
+
 ## Resolved discrepancy: solution name
 
 The project prompt names the solution `HSVServiceIntakeV2` / "HSV Service

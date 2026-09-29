@@ -103,7 +103,7 @@ $Trades = @(
 )
 
 function New-CorrelationLog {
-    param([string] $MessageId, [string] $CorrelationId, [int] $AttemptNumber, [int] $Stage, [int] $Result, [string] $ReasonCode)
+    param([string] $MessageId, [string] $CorrelationId, [int] $AttemptNumber, [int] $Stage, [int] $Result, [string] $ReasonCode, [string] $PreviousAttemptId)
     $body = @{
         hsv_inboundmessage = $MessageId
         'hsv_InboundMessage@odata.bind' = "/hsv_inboundmessages($MessageId)"
@@ -117,16 +117,31 @@ function New-CorrelationLog {
         hsv_startedon = (Get-Date).ToUniversalTime().ToString('o')
     }
     if ($ReasonCode) { $body['hsv_reasoncode'] = $ReasonCode }
+    if ($PreviousAttemptId) { $body['hsv_PreviousAttempt@odata.bind'] = "/hsv_processingattempts($PreviousAttemptId)" }
     $body.Remove('hsv_inboundmessage')
-    Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'hsv_processingattempts' -Body $body | Out-Null
+    $result = Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'hsv_processingattempts' -Body $body
+    return $result.hsv_processingattemptid
+}
+
+function Get-NextAttemptNumber {
+    # AttemptNumber counts processing attempts against a specific
+    # hsv_inboundmessage record, not against a single pipeline run's
+    # CorrelationId (each delivery/webhook call gets its own CorrelationId -
+    # see review item 26). Used when a technical duplicate delivery needs to
+    # be logged against the ALREADY-EXISTING message.
+    param([string] $MessageId)
+    $prior = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_processingattempts?`$filter=_hsv_inboundmessage_value eq $MessageId&`$select=hsv_attemptnumber,hsv_processingattemptid&`$orderby=hsv_attemptnumber desc&`$top=1"
+    if ($prior.value.Count -eq 0) { return @{ Number = 1; PreviousId = $null } }
+    return @{ Number = $prior.value[0].hsv_attemptnumber + 1; PreviousId = $prior.value[0].hsv_processingattemptid }
 }
 
 # hsv_stage values
 $StageIngest = 209710201; $StageParse = 209710202; $StageValidate = 209710203; $StageDupCheck = 209710204; $StageCreate = 209710205
 # hsv_result values
-$ResultSuccess = 209710301; $ResultBusinessException = 209710302
+$ResultSuccess = 209710301; $ResultBusinessException = 209710302; $ResultSkipped = 209710304
 # hsv_reasoncode values
 $ReasonMissingAddr = 209710401; $ReasonUnknownCustomer = 209710402; $ReasonNotARequest = 209710403; $ReasonPossibleDup = 209710404
+$ReasonTechnicalDuplicate = 209710410
 
 function Invoke-DemoMessage {
     param([hashtable] $Msg, [int] $Index, [int] $Total)
@@ -179,10 +194,22 @@ function Invoke-DemoMessage {
         $status[0] = 'Fail'
         Write-Pipeline $status
         $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_inboundmessages?`$filter=hsv_providermessageid eq '$($Msg.ProviderMessageId)'&`$select=hsv_inboundmessageid"
-        $existingId = if ($existing.value.Count -gt 0) { $existing.value[0].hsv_inboundmessageid } else { '(unknown)' }
+        $existingId = if ($existing.value.Count -gt 0) { $existing.value[0].hsv_inboundmessageid } else { $null }
         Write-Host "    -> TECHNISCHES DUPLIKAT: ProviderMessageId '$($Msg.ProviderMessageId)' bereits verarbeitet (Record $existingId)." -ForegroundColor Yellow
-        Write-Host "    -> Dataverse selbst hat abgelehnt (Alternate Key) - keine Anwendungslogik noetig." -ForegroundColor DarkGray
-        $trace.stages += @{ name = 'Ingest'; result = 'Duplicate'; detail = "Rejected by alternate key - already exists as $existingId" }
+        Write-Host "    -> Dataverse selbst hat abgelehnt (Alternate Key)." -ForegroundColor DarkGray
+        # Review items 25/26: a second hsv_inboundmessage can never exist for
+        # this ProviderMessageId (the alternate key already refused it), so
+        # there is no second record to mark Duplicate. What actually
+        # happened - a repeat delivery of an already-processed message - is
+        # recorded as a new hsv_processingattempt against the ORIGINAL
+        # message instead, not silently dropped as a script-local trace
+        # entry that never reaches Dataverse.
+        if ($existingId) {
+            $next = Get-NextAttemptNumber -MessageId $existingId
+            New-CorrelationLog -MessageId $existingId -CorrelationId $correlationId -AttemptNumber $next.Number -Stage $StageIngest -Result $ResultSkipped -ReasonCode $ReasonTechnicalDuplicate -PreviousAttemptId $next.PreviousId | Out-Null
+            Write-Host "    -> hsv_processingattempt logged against $existingId (Attempt $($next.Number), Skipped/TECHNICAL_DUPLICATE)." -ForegroundColor DarkGray
+        }
+        $trace.stages += @{ name = 'Ingest'; result = 'Duplicate'; detail = "Rejected by alternate key - already exists as $existingId; logged as a new ProcessingAttempt (Skipped/TECHNICAL_DUPLICATE) against it" }
         $trace.finalStatus = 'Duplicate'
         $trace.finalDetail = "Provider-ID bereits verarbeitet ($existingId)"
         return $trace

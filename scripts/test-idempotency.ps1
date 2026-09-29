@@ -103,18 +103,72 @@ if ($count -eq 1) {
     Log "[FAIL] Control query: expected exactly 1 record, found $count."
 }
 
+# --- Review items 25/26/27: the rejected second delivery is not just an
+#     HTTP error that gets swallowed - it must be recorded as a new
+#     ProcessingAttempt against the ORIGINAL (only) message, since a second
+#     hsv_inboundmessage was never created for it to be recorded against.
+$attempt1LogId = $null
+$attempt2LogId = $null
+$logSequenceOk = $false
+if ($firstId -and $attempt2Status -ge 400 -and $attempt2Status -lt 500) {
+    try {
+        $attempt1Log = Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'hsv_processingattempts' -AdditionalHeaders @{ Prefer = 'return=representation' } -Body @{
+            'hsv_InboundMessage@odata.bind' = "/hsv_inboundmessages($firstId)"
+            hsv_correlationid    = [guid]::NewGuid().ToString()
+            hsv_attemptnumber    = 1
+            hsv_stage            = 209710201  # Ingest
+            hsv_result           = 209710301  # Success
+            hsv_retryable        = $false
+            hsv_triggeredby      = 209710721  # Event
+            hsv_componentversion = '1.0.0.0'
+            hsv_startedon        = (Get-Date).ToUniversalTime().ToString('o')
+        }
+        $attempt1LogId = $attempt1Log.hsv_processingattemptid
+
+        $attempt2Log = Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'hsv_processingattempts' -AdditionalHeaders @{ Prefer = 'return=representation' } -Body @{
+            'hsv_InboundMessage@odata.bind' = "/hsv_inboundmessages($firstId)"
+            hsv_correlationid    = [guid]::NewGuid().ToString()
+            hsv_attemptnumber    = 2
+            hsv_stage            = 209710201  # Ingest
+            hsv_result           = 209710304  # Skipped
+            hsv_reasoncode       = 209710410  # TECHNICAL_DUPLICATE
+            hsv_retryable        = $false
+            hsv_triggeredby      = 209710721  # Event
+            hsv_componentversion = '1.0.0.0'
+            hsv_startedon        = (Get-Date).ToUniversalTime().ToString('o')
+            'hsv_PreviousAttempt@odata.bind' = "/hsv_processingattempts($attempt1LogId)"
+        }
+        $attempt2LogId = $attempt2Log.hsv_processingattemptid
+
+        $attempts = (Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_processingattempts?`$filter=_hsv_inboundmessage_value eq $firstId&`$select=hsv_attemptnumber,hsv_result,hsv_reasoncode&`$orderby=hsv_attemptnumber asc").value
+        $logSequenceOk = ($attempts.Count -eq 2) -and ($attempts[0].hsv_result -eq 209710301) -and ($attempts[1].hsv_result -eq 209710304) -and ($attempts[1].hsv_reasoncode -eq 209710410)
+        if ($logSequenceOk) {
+            Log "[PASS] The single message now has 2 ProcessingAttempts: 1=Success, 2=Skipped/TECHNICAL_DUPLICATE (linked via hsv_PreviousAttempt) - the rejected repeat delivery is recorded, not silently dropped."
+        } else {
+            Log "[FAIL] ProcessingAttempt sequence for the single message wasn't as expected."
+        }
+    } catch {
+        Log "[FAIL] Could not log the ProcessingAttempt pair for the technical duplicate: $($_.Exception.Message)"
+    }
+}
+
 # --- Cleanup: delete the test record (the one allowed deletion) -----------
+foreach ($logId in @($attempt2LogId, $attempt1LogId)) {
+    if ($logId) {
+        try { Invoke-DataverseApi -OrgUrl $org -Method DELETE -Path "hsv_processingattempts($logId)" | Out-Null } catch { Log "[WARNING] Cleanup failed for ProcessingAttempt $logId - remove manually. $($_.Exception.Message)" }
+    }
+}
 if ($firstId) {
     try {
         Invoke-DataverseApi -OrgUrl $org -Method DELETE -Path "hsv_inboundmessages($firstId)" | Out-Null
-        Log "[INFO] Cleanup: test record $firstId deleted."
+        Log "[INFO] Cleanup: test record $firstId (and its ProcessingAttempts) deleted."
     } catch {
         Log "[WARNING] Cleanup failed for record $firstId - remove manually. $($_.Exception.Message)"
     }
 }
 
 Log ""
-$overallPass = ($attempt1Status -eq 201) -and ($attempt2Status -ge 400 -and $attempt2Status -lt 500) -and ($count -eq 1)
+$overallPass = ($attempt1Status -eq 201) -and ($attempt2Status -ge 400 -and $attempt2Status -lt 500) -and ($count -eq 1) -and $logSequenceOk
 if ($overallPass) {
     Log "Result: PASS"
 } else {
