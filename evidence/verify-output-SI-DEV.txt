@@ -1,0 +1,99 @@
+﻿[PASS] Solution HSVServiceIntakeV2 exists
+[PASS] Publisher prefix hsv exists
+[PASS] Table hsv_serviceobject exists
+[PASS] Table hsv_serviceobject is in solution HSVServiceIntakeV2
+[PASS] Table hsv_serviceobject ownership type = OrganizationOwned
+[PASS] Table hsv_workorder exists
+[PASS] Table hsv_workorder is in solution HSVServiceIntakeV2
+[PASS] Table hsv_workorder ownership type = UserOwned
+[PASS] Table hsv_inboundmessage exists
+[PASS] Table hsv_inboundmessage is in solution HSVServiceIntakeV2
+[PASS] Table hsv_inboundmessage ownership type = OrganizationOwned
+[PASS] Table hsv_processingattempt exists
+[PASS] Table hsv_processingattempt is in solution HSVServiceIntakeV2
+[PASS] Table hsv_processingattempt ownership type = OrganizationOwned
+[PASS] Table hsv_statustransition exists
+[PASS] Table hsv_statustransition is in solution HSVServiceIntakeV2
+[PASS] Table hsv_statustransition ownership type = OrganizationOwned
+[PASS] Global choice hsv_messagestatus exists
+[PASS] Global choice hsv_workorderstatus exists
+[PASS] Global choice hsv_stage exists
+[PASS] Global choice hsv_result exists
+[PASS] Global choice hsv_reasoncode exists
+[PASS] Global choice hsv_trade exists
+[PASS] Global choice hsv_priority exists
+[PASS] hsv_serviceobject.hsv_objectnumber is String with RequiredLevel matching YAML
+[PASS] hsv_serviceobject.hsv_street is String with RequiredLevel matching YAML
+[PASS] hsv_serviceobject.hsv_postalcode is String with RequiredLevel matching YAML
+[PASS] hsv_serviceobject.hsv_city is String with RequiredLevel matching YAML
+[PASS] hsv_serviceobject.hsv_notes is Memo with RequiredLevel matching YAML
+[PASS] hsv_workorder.hsv_title is String with RequiredLevel matching YAML
+[PASS] hsv_workorder.hsv_description is Memo with RequiredLevel matching YAML
+[PASS] hsv_workorder.hsv_trade is Picklist with RequiredLevel matching YAML
+[PASS] hsv_workorder.hsv_priority is Picklist with RequiredLevel matching YAML
+[PASS] hsv_workorder.hsv_status is Picklist with RequiredLevel matching YAML
+[PASS] hsv_workorder.hsv_assignedon is DateTime with RequiredLevel matching YAML
+[PASS] hsv_workorder.hsv_completedon is DateTime with RequiredLevel matching YAML
+[PASS] hsv_workorder.hsv_duedate is DateTime with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_providermessageid is String with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_conversationid is String with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_correlationid is String with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_receivedon is DateTime with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_fromaddress is String with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_subject is String with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_body is Memo with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_hasattachments is Boolean with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_status is Picklist with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_reasoncode is Picklist with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_businesskey is String with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_businesskeyhash is String with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_matchreason is Memo with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_duplicatedecision is Picklist with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_decidedon is DateTime with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_extractionsource is Picklist with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_requiresreview is Boolean with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_nextreviewon is DateTime with RequiredLevel matching YAML
+[PASS] hsv_inboundmessage.hsv_retrycount is Integer with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_correlationid is String with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_attemptnumber is Integer with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_stage is Picklist with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_result is Picklist with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_retryable is Boolean with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_reasoncode is Picklist with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_responsestatus is Integer with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_durationms is Integer with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_triggeredby is Picklist with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_componentversion is String with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_startedon is DateTime with RequiredLevel matching YAML
+[PASS] hsv_processingattempt.hsv_completedon is DateTime with RequiredLevel matching YAML
+[PASS] hsv_statustransition.hsv_entityname is Picklist with RequiredLevel matching YAML
+[PASS] hsv_statustransition.hsv_fromstatus is String with RequiredLevel matching YAML
+[PASS] hsv_statustransition.hsv_tostatus is String with RequiredLevel matching YAML
+[PASS] hsv_statustransition.hsv_allowedtrigger is Picklist with RequiredLevel matching YAML
+[PASS] hsv_statustransition.hsv_isactive is Boolean with RequiredLevel matching YAML
+[PASS] Relationship hsv_account_serviceobject exists
+[PASS] Relationship hsv_account_workorder exists
+[PASS] Relationship hsv_serviceobject_workorder exists
+[PASS] Relationship contact_hsv_workorder exists
+[PASS] Relationship hsv_workorder_inboundmessage exists
+[PASS] Relationship hsv_inboundmessage_duplicateof exists
+[PASS] Relationship hsv_inboundmessage_processingattempt exists
+[PASS] Relationship hsv_processingattempt_previousattempt exists
+[PASS] Relationship hsv_inboundmessage_sourcemessage exists
+[PASS] Relationship hsv_systemuser_inboundmessage_decidedby exists
+[PASS] Organization-level auditing is ON (required for table auditing to take effect)
+[PASS] Auditing enabled on hsv_workorder
+[PASS] Auditing enabled on hsv_inboundmessage
+[PASS] Key hsv_ServiceObject_AccountObjectNumber on hsv_serviceobject is Active
+[PASS] Key hsv_WorkOrder_Number on hsv_workorder is Active
+[PASS] Key hsv_InboundMessage_ProviderMessageId on hsv_inboundmessage is Active
+[PASS] Key hsv_ProcessingAttempt_Correlation on hsv_processingattempt is Active
+[PASS] hsv_businesskeyhash is NOT part of any alternate key on hsv_inboundmessage
+[PASS] Role 'HSV Disponent' exists with all 23 domain privileges
+[PASS] Role 'HSV Techniker' exists with all 6 domain privileges
+[PASS] Role 'HSV Auditor' exists with all 6 domain privileges
+[PASS] Role 'HSV Plattformbetreuer' exists with all 17 domain privileges
+[PASS] Pre-existing V1 role 'SI Auditor' is untouched (still exists, distinct from our roles)
+[PASS] hsv_statustransition has all 23 configured rows
+
+=== ALL CHECKS PASSED ===

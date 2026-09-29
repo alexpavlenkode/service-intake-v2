@@ -1,0 +1,186 @@
+Full from-scratch deployment into SI-TEST (second clean environment)
+======================================================================
+Reproducibility test: same scripts + schema/*.yaml, different target
+environment (config.si-test.psd1). No manual clicking anywhere.
+
+Two passes were needed because relationships/keys/auditing depend on
+tables that don't exist yet at the start of the same run that creates
+them - this is expected, documented behavior (see README), not a bug.
+
+--- PASS 1: deploy.ps1 -Apply (publisher, solution, choices, tables) ---
+
+[CREATE] Publisher 'HSV': CREATE - prefix hsv, optionvalueprefix 20971
+[CREATE] Solution 'HSVServiceIntakeV2': CREATE - HSV Service Intake V2
+[CREATE] GlobalChoice 'hsv_MessageStatus': CREATE - 11 options
+[CREATE] GlobalChoice 'hsv_WorkOrderStatus': CREATE - 5 options
+[CREATE] GlobalChoice 'hsv_Stage': CREATE - 7 options
+[CREATE] GlobalChoice 'hsv_Result': CREATE - 4 options
+[CREATE] GlobalChoice 'hsv_ReasonCode': CREATE - 9 options
+[CREATE] GlobalChoice 'hsv_Trade': CREATE - 5 options
+[CREATE] GlobalChoice 'hsv_Priority': CREATE - 3 options
+[CREATE] Table 'hsv_serviceobject': CREATE - 5 columns now, 1 Lookup column(s) deferred to Phase C (relationships), ownership=OrganizationOwned
+[CREATE] Table 'hsv_serviceobject' created with 6 attributes (incl. primary name).
+[CREATE] Table 'hsv_workorder': CREATE - 8 columns now, 4 Lookup column(s) deferred to Phase C (relationships), ownership=UserOwned
+[CREATE] Table 'hsv_workorder' created with 9 attributes (incl. primary name).
+[CREATE] Table 'hsv_inboundmessage': CREATE - 19 columns now, 5 Lookup column(s) deferred to Phase C (relationships), ownership=OrganizationOwned
+[CREATE] Table 'hsv_inboundmessage' created with 20 attributes (incl. primary name).
+[CREATE] Table 'hsv_processingattempt': CREATE - 12 columns now, 2 Lookup column(s) deferred to Phase C (relationships), ownership=OrganizationOwned
+[CREATE] Table 'hsv_processingattempt' created with 13 attributes (incl. primary name).
+[CREATE] Table 'hsv_statustransition': CREATE - 5 columns now, 0 Lookup column(s) deferred to Phase C (relationships), ownership=OrganizationOwned
+[CREATE] Table 'hsv_statustransition' created with 6 attributes (incl. primary name).
+[CREATE] Relationship 'hsv_account_serviceobject': CREATE - pending - depends on a table this run will create first
+[CREATE] Relationship 'hsv_account_workorder': CREATE - pending - depends on a table this run will create first
+[CREATE] Relationship 'hsv_serviceobject_workorder': CREATE - pending - depends on a table this run will create first
+[CREATE] Relationship 'contact_hsv_workorder': CREATE - pending - depends on a table this run will create first
+[CREATE] Relationship 'hsv_workorder_inboundmessage': CREATE - pending - depends on a table this run will create first
+[CREATE] Relationship 'hsv_inboundmessage_duplicateof': CREATE - pending - depends on a table this run will create first
+[CREATE] Relationship 'hsv_inboundmessage_processingattempt': CREATE - pending - depends on a table this run will create first
+[CREATE] Relationship 'hsv_processingattempt_previousattempt': CREATE - pending - depends on a table this run will create first
+[CREATE] Relationship 'hsv_inboundmessage_sourcemessage': CREATE - pending - depends on a table this run will create first
+[CREATE] Relationship 'hsv_systemuser_inboundmessage_decidedby': CREATE - pending - depends on a table this run will create first
+[CREATE] AlternateKey 'hsv_ServiceObject_AccountObjectNumber': CREATE - pending - table hsv_serviceobject not created yet
+[CREATE] AlternateKey 'hsv_WorkOrder_Number': CREATE - pending - table hsv_workorder not created yet
+[CREATE] AlternateKey 'hsv_InboundMessage_ProviderMessageId': CREATE - pending - table hsv_inboundmessage not created yet
+[CREATE] AlternateKey 'hsv_ProcessingAttempt_Correlation': CREATE - pending - table hsv_processingattempt not created yet
+[WARNING] Auditing 'organization': MANUAL DECISION REQUIRED - Organization-level auditing is OFF. Table-level auditing settings below will have no effect until an admin turns this on (Settings > Auditing). This is not something this script can or should flip on its own.
+[CREATE] Auditing 'hsv_workorder': CREATE - pending - table not created yet
+[CREATE] Auditing 'hsv_inboundmessage': CREATE - pending - table not created yet
+
+=== SUMMARY ===
+CREATE: 30
+MANUAL DECISION REQUIRED: 1
+
+Kind         Name                                    Action                   Detail                                   
+----         ----                                    ------                   ------                                   
+Publisher    HSV                                     CREATE                   prefix hsv, optionvalueprefix 20971      
+Solution     HSVServiceIntakeV2                      CREATE                   HSV Service Intake V2                    
+GlobalChoice hsv_MessageStatus                       CREATE                   11 options                               
+GlobalChoice hsv_WorkOrderStatus                     CREATE                   5 options                                
+GlobalChoice hsv_Stage                               CREATE                   7 options                                
+GlobalChoice hsv_Result                              CREATE                   4 options                                
+GlobalChoice hsv_ReasonCode                          CREATE                   9 options                                
+GlobalChoice hsv_Trade                               CREATE                   5 options                                
+GlobalChoice hsv_Priority                            CREATE                   3 options                                
+Table        hsv_serviceobject                       CREATE                   5 columns now, 1 Lookup column(s) defe...
+Table        hsv_workorder                           CREATE                   8 columns now, 4 Lookup column(s) defe...
+Table        hsv_inboundmessage                      CREATE                   19 columns now, 5 Lookup column(s) def...
+Table        hsv_processingattempt                   CREATE                   12 columns now, 2 Lookup column(s) def...
+Table        hsv_statustransition                    CREATE                   5 columns now, 0 Lookup column(s) defe...
+Relationship hsv_account_serviceobject               CREATE                   pending - depends on a table this run ...
+Relationship hsv_account_workorder                   CREATE                   pending - depends on a table this run ...
+Relationship hsv_serviceobject_workorder             CREATE                   pending - depends on a table this run ...
+Relationship contact_hsv_workorder                   CREATE                   pending - depends on a table this run ...
+Relationship hsv_workorder_inboundmessage            CREATE                   pending - depends on a table this run ...
+Relationship hsv_inboundmessage_duplicateof          CREATE                   pending - depends on a table this run ...
+Relationship hsv_inboundmessage_processingattempt    CREATE                   pending - depends on a table this run ...
+Relationship hsv_processingattempt_previousattempt   CREATE                   pending - depends on a table this run ...
+Relationship hsv_inboundmessage_sourcemessage        CREATE                   pending - depends on a table this run ...
+Relationship hsv_systemuser_inboundmessage_decidedby CREATE                   pending - depends on a table this run ...
+AlternateKey hsv_ServiceObject_AccountObjectNumber   CREATE                   pending - table hsv_serviceobject not ...
+AlternateKey hsv_WorkOrder_Number                    CREATE                   pending - table hsv_workorder not crea...
+AlternateKey hsv_InboundMessage_ProviderMessageId    CREATE                   pending - table hsv_inboundmessage not...
+AlternateKey hsv_ProcessingAttempt_Correlation       CREATE                   pending - table hsv_processingattempt ...
+Auditing     organization                            MANUAL DECISION REQUIRED Organization-level auditing is OFF. Ta...
+Auditing     hsv_workorder                           CREATE                   pending - table not created yet          
+Auditing     hsv_inboundmessage                      CREATE                   pending - table not created yet          
+
+
+
+[exited with code 0]
+
+--- PASS 2: deploy.ps1 -Apply (relationships, keys, auditing) ---
+
+[VERIFY] Publisher 'HSV': VERIFY - already exists, matches config
+[VERIFY] Solution 'HSVServiceIntakeV2': VERIFY - already exists, version 1.0.0.0
+[VERIFY] GlobalChoice 'hsv_MessageStatus': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_WorkOrderStatus': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_Stage': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_Result': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_ReasonCode': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_Trade': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_Priority': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] Table 'hsv_serviceobject': VERIFY - already exists - column-level diff not checked by this pass, see verify.ps1
+[VERIFY] Table 'hsv_workorder': VERIFY - already exists - column-level diff not checked by this pass, see verify.ps1
+[VERIFY] Table 'hsv_inboundmessage': VERIFY - already exists - column-level diff not checked by this pass, see verify.ps1
+[VERIFY] Table 'hsv_processingattempt': VERIFY - already exists - column-level diff not checked by this pass, see verify.ps1
+[VERIFY] Table 'hsv_statustransition': VERIFY - already exists - column-level diff not checked by this pass, see verify.ps1
+[CREATE] Relationship 'hsv_account_serviceobject': CREATE - Restrict
+[CREATE] Relationship 'hsv_account_serviceobject' created (Lookup 'hsv_Account' on hsv_serviceobject).
+[CREATE] Relationship 'hsv_account_workorder': CREATE - Restrict
+[CREATE] Relationship 'hsv_account_workorder' created (Lookup 'hsv_Account' on hsv_workorder).
+[CREATE] Relationship 'hsv_serviceobject_workorder': CREATE - Restrict
+[CREATE] Relationship 'hsv_serviceobject_workorder' created (Lookup 'hsv_ServiceObject' on hsv_workorder).
+[CREATE] Relationship 'contact_hsv_workorder': CREATE - RemoveLink
+[CREATE] Relationship 'contact_hsv_workorder' created (Lookup 'hsv_Contact' on hsv_workorder).
+[CREATE] Relationship 'hsv_workorder_inboundmessage': CREATE - RemoveLink
+[CREATE] Relationship 'hsv_workorder_inboundmessage' created (Lookup 'hsv_WorkOrder' on hsv_inboundmessage).
+[CREATE] Relationship 'hsv_inboundmessage_duplicateof': CREATE - RemoveLink
+[CREATE] Relationship 'hsv_inboundmessage_duplicateof' created (Lookup 'hsv_DuplicateOf' on hsv_inboundmessage).
+[CREATE] Relationship 'hsv_inboundmessage_processingattempt': CREATE - Parental
+[CREATE] Relationship 'hsv_inboundmessage_processingattempt' created (Lookup 'hsv_InboundMessage' on hsv_processingattempt).
+[CREATE] Relationship 'hsv_processingattempt_previousattempt': CREATE - RemoveLink
+[CREATE] Relationship 'hsv_processingattempt_previousattempt' created (Lookup 'hsv_PreviousAttempt' on hsv_processingattempt).
+[CREATE] Relationship 'hsv_inboundmessage_sourcemessage': CREATE - RemoveLink
+[CREATE] Relationship 'hsv_inboundmessage_sourcemessage' created (Lookup 'hsv_SourceMessage' on hsv_workorder).
+[CREATE] Relationship 'hsv_systemuser_inboundmessage_decidedby': CREATE - RemoveLink
+[CREATE] Relationship 'hsv_systemuser_inboundmessage_decidedby' created (Lookup 'hsv_DecidedBy' on hsv_inboundmessage).
+[CREATE] AlternateKey 'hsv_ServiceObject_AccountObjectNumber': CREATE - on existing table hsv_serviceobject
+[CREATE] Alternate key 'hsv_ServiceObject_AccountObjectNumber' submitted on hsv_serviceobject, polling for Active...
+[VERIFY] Alternate key 'hsv_ServiceObject_AccountObjectNumber' is Active.
+[CREATE] AlternateKey 'hsv_WorkOrder_Number': CREATE - on existing table hsv_workorder
+[CREATE] Alternate key 'hsv_WorkOrder_Number' submitted on hsv_workorder, polling for Active...
+[VERIFY] Alternate key 'hsv_WorkOrder_Number' is Active.
+[CREATE] AlternateKey 'hsv_InboundMessage_ProviderMessageId': CREATE - on existing table hsv_inboundmessage
+[CREATE] Alternate key 'hsv_InboundMessage_ProviderMessageId' submitted on hsv_inboundmessage, polling for Active...
+[VERIFY] Alternate key 'hsv_InboundMessage_ProviderMessageId' is Active.
+[CREATE] AlternateKey 'hsv_ProcessingAttempt_Correlation': CREATE - on existing table hsv_processingattempt
+[CREATE] Alternate key 'hsv_ProcessingAttempt_Correlation' submitted on hsv_processingattempt, polling for Active...
+[VERIFY] Alternate key 'hsv_ProcessingAttempt_Correlation' is Active.
+[WARNING] Auditing 'organization': MANUAL DECISION REQUIRED - Organization-level auditing is OFF. Table-level auditing settings below will have no effect until an admin turns this on (Settings > Auditing). This is not something this script can or should flip on its own.
+[CREATE] Auditing 'hsv_workorder': CREATE - enable auditing (all columns audited once org-level is on; emphasize when reviewing: hsv_Status, ownerid)
+[CREATE] Auditing enabled on hsv_workorder (dormant until org-level auditing is turned on - see MANUAL DECISION REQUIRED above).
+[CREATE] Auditing 'hsv_inboundmessage': CREATE - enable auditing (all columns audited once org-level is on; emphasize when reviewing: hsv_Status, hsv_DuplicateDecision)
+[CREATE] Auditing enabled on hsv_inboundmessage (dormant until org-level auditing is turned on - see MANUAL DECISION REQUIRED above).
+
+=== SUMMARY ===
+CREATE: 16
+MANUAL DECISION REQUIRED: 1
+VERIFY: 14
+
+Kind         Name                                    Action                   Detail                                   
+----         ----                                    ------                   ------                                   
+Publisher    HSV                                     VERIFY                   already exists, matches config           
+Solution     HSVServiceIntakeV2                      VERIFY                   already exists, version 1.0.0.0          
+GlobalChoice hsv_MessageStatus                       VERIFY                   already exists - option-value diff not...
+GlobalChoice hsv_WorkOrderStatus                     VERIFY                   already exists - option-value diff not...
+GlobalChoice hsv_Stage                               VERIFY                   already exists - option-value diff not...
+GlobalChoice hsv_Result                              VERIFY                   already exists - option-value diff not...
+GlobalChoice hsv_ReasonCode                          VERIFY                   already exists - option-value diff not...
+GlobalChoice hsv_Trade                               VERIFY                   already exists - option-value diff not...
+GlobalChoice hsv_Priority                            VERIFY                   already exists - option-value diff not...
+Table        hsv_serviceobject                       VERIFY                   already exists - column-level diff not...
+Table        hsv_workorder                           VERIFY                   already exists - column-level diff not...
+Table        hsv_inboundmessage                      VERIFY                   already exists - column-level diff not...
+Table        hsv_processingattempt                   VERIFY                   already exists - column-level diff not...
+Table        hsv_statustransition                    VERIFY                   already exists - column-level diff not...
+Relationship hsv_account_serviceobject               CREATE                   Restrict                                 
+Relationship hsv_account_workorder                   CREATE                   Restrict                                 
+Relationship hsv_serviceobject_workorder             CREATE                   Restrict                                 
+Relationship contact_hsv_workorder                   CREATE                   RemoveLink                               
+Relationship hsv_workorder_inboundmessage            CREATE                   RemoveLink                               
+Relationship hsv_inboundmessage_duplicateof          CREATE                   RemoveLink                               
+Relationship hsv_inboundmessage_processingattempt    CREATE                   Parental                                 
+Relationship hsv_processingattempt_previousattempt   CREATE                   RemoveLink                               
+Relationship hsv_inboundmessage_sourcemessage        CREATE                   RemoveLink                               
+Relationship hsv_systemuser_inboundmessage_decidedby CREATE                   RemoveLink                               
+AlternateKey hsv_ServiceObject_AccountObjectNumber   CREATE                   on existing table hsv_serviceobject      
+AlternateKey hsv_WorkOrder_Number                    CREATE                   on existing table hsv_workorder          
+AlternateKey hsv_InboundMessage_ProviderMessageId    CREATE                   on existing table hsv_inboundmessage     
+AlternateKey hsv_ProcessingAttempt_Correlation       CREATE                   on existing table hsv_processingattempt  
+Auditing     organization                            MANUAL DECISION REQUIRED Organization-level auditing is OFF. Ta...
+Auditing     hsv_workorder                           CREATE                   enable auditing (all columns audited o...
+Auditing     hsv_inboundmessage                      CREATE                   enable auditing (all columns audited o...
+
+
+
+[exited with code 0]

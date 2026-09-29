@@ -1,0 +1,68 @@
+﻿[VERIFY] Publisher 'HSV': VERIFY - already exists, matches config
+[VERIFY] Solution 'HSVServiceIntakeV2': VERIFY - already exists, version 1.0.0.0
+[VERIFY] GlobalChoice 'hsv_MessageStatus': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_WorkOrderStatus': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_Stage': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_Result': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_ReasonCode': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_Trade': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] GlobalChoice 'hsv_Priority': VERIFY - already exists - option-value diff not checked by this pass, see verify.ps1
+[VERIFY] Table 'hsv_serviceobject': VERIFY - already exists - column-level diff not checked by this pass, see verify.ps1
+[VERIFY] Table 'hsv_workorder': VERIFY - already exists - column-level diff not checked by this pass, see verify.ps1
+[VERIFY] Table 'hsv_inboundmessage': VERIFY - already exists - column-level diff not checked by this pass, see verify.ps1
+[VERIFY] Table 'hsv_processingattempt': VERIFY - already exists - column-level diff not checked by this pass, see verify.ps1
+[VERIFY] Table 'hsv_statustransition': VERIFY - already exists - column-level diff not checked by this pass, see verify.ps1
+[VERIFY] Relationship 'hsv_account_serviceobject': VERIFY - already exists
+[VERIFY] Relationship 'hsv_account_workorder': VERIFY - already exists
+[VERIFY] Relationship 'hsv_serviceobject_workorder': VERIFY - already exists
+[VERIFY] Relationship 'contact_hsv_workorder': VERIFY - already exists
+[VERIFY] Relationship 'hsv_workorder_inboundmessage': VERIFY - already exists
+[VERIFY] Relationship 'hsv_inboundmessage_duplicateof': VERIFY - already exists
+[VERIFY] Relationship 'hsv_inboundmessage_processingattempt': VERIFY - already exists
+[VERIFY] Relationship 'hsv_processingattempt_previousattempt': VERIFY - already exists
+[VERIFY] Relationship 'hsv_inboundmessage_sourcemessage': VERIFY - already exists
+[VERIFY] Relationship 'hsv_systemuser_inboundmessage_decidedby': VERIFY - already exists
+[VERIFY] AlternateKey 'hsv_ServiceObject_AccountObjectNumber': VERIFY - already exists on hsv_serviceobject
+[VERIFY] AlternateKey 'hsv_WorkOrder_Number': VERIFY - already exists on hsv_workorder
+[VERIFY] AlternateKey 'hsv_InboundMessage_ProviderMessageId': VERIFY - already exists on hsv_inboundmessage
+[VERIFY] AlternateKey 'hsv_ProcessingAttempt_Correlation': VERIFY - already exists on hsv_processingattempt
+[VERIFY] Auditing 'hsv_workorder': VERIFY - already enabled
+[VERIFY] Auditing 'hsv_inboundmessage': VERIFY - already enabled
+
+=== SUMMARY ===
+VERIFY: 30
+
+Kind         Name                                    Action Detail                                                     
+----         ----                                    ------ ------                                                     
+Publisher    HSV                                     VERIFY already exists, matches config                             
+Solution     HSVServiceIntakeV2                      VERIFY already exists, version 1.0.0.0                            
+GlobalChoice hsv_MessageStatus                       VERIFY already exists - option-value diff not checked by this p...
+GlobalChoice hsv_WorkOrderStatus                     VERIFY already exists - option-value diff not checked by this p...
+GlobalChoice hsv_Stage                               VERIFY already exists - option-value diff not checked by this p...
+GlobalChoice hsv_Result                              VERIFY already exists - option-value diff not checked by this p...
+GlobalChoice hsv_ReasonCode                          VERIFY already exists - option-value diff not checked by this p...
+GlobalChoice hsv_Trade                               VERIFY already exists - option-value diff not checked by this p...
+GlobalChoice hsv_Priority                            VERIFY already exists - option-value diff not checked by this p...
+Table        hsv_serviceobject                       VERIFY already exists - column-level diff not checked by this p...
+Table        hsv_workorder                           VERIFY already exists - column-level diff not checked by this p...
+Table        hsv_inboundmessage                      VERIFY already exists - column-level diff not checked by this p...
+Table        hsv_processingattempt                   VERIFY already exists - column-level diff not checked by this p...
+Table        hsv_statustransition                    VERIFY already exists - column-level diff not checked by this p...
+Relationship hsv_account_serviceobject               VERIFY already exists                                             
+Relationship hsv_account_workorder                   VERIFY already exists                                             
+Relationship hsv_serviceobject_workorder             VERIFY already exists                                             
+Relationship contact_hsv_workorder                   VERIFY already exists                                             
+Relationship hsv_workorder_inboundmessage            VERIFY already exists                                             
+Relationship hsv_inboundmessage_duplicateof          VERIFY already exists                                             
+Relationship hsv_inboundmessage_processingattempt    VERIFY already exists                                             
+Relationship hsv_processingattempt_previousattempt   VERIFY already exists                                             
+Relationship hsv_inboundmessage_sourcemessage        VERIFY already exists                                             
+Relationship hsv_systemuser_inboundmessage_decidedby VERIFY already exists                                             
+AlternateKey hsv_ServiceObject_AccountObjectNumber   VERIFY already exists on hsv_serviceobject                        
+AlternateKey hsv_WorkOrder_Number                    VERIFY already exists on hsv_workorder                            
+AlternateKey hsv_InboundMessage_ProviderMessageId    VERIFY already exists on hsv_inboundmessage                       
+AlternateKey hsv_ProcessingAttempt_Correlation       VERIFY already exists on hsv_processingattempt                    
+Auditing     hsv_workorder                           VERIFY already enabled                                            
+Auditing     hsv_inboundmessage                      VERIFY already enabled                                            
+
+
