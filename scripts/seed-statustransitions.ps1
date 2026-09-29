@@ -13,7 +13,8 @@
 [CmdletBinding(DefaultParameterSetName = 'DryRun')]
 param(
     [Parameter(ParameterSetName = 'DryRun')] [switch] $DryRun,
-    [Parameter(ParameterSetName = 'Apply')] [switch] $Apply
+    [Parameter(ParameterSetName = 'Apply')] [switch] $Apply,
+    [string] $ConfigPath = "$PSScriptRoot\config.psd1"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,7 +23,7 @@ if (-not $DryRun -and -not $Apply) { throw "Specify either -DryRun or -Apply." }
 Import-Module "$PSScriptRoot\lib\Dataverse.psm1" -Force
 Import-Module powershell-yaml -Force
 
-$config = Import-PowerShellDataFile "$PSScriptRoot\config.psd1"
+$config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
 $org = $config.OrgUrl
 

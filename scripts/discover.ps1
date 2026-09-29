@@ -9,12 +9,14 @@
         raw findings (used by deploy.ps1 -DryRun).
 #>
 [CmdletBinding()]
-param()
+param(
+    [string] $ConfigPath = "$PSScriptRoot\config.psd1"
+)
 
 $ErrorActionPreference = 'Stop'
 Import-Module "$PSScriptRoot\lib\Dataverse.psm1" -Force
 
-$config = Import-PowerShellDataFile "$PSScriptRoot\config.psd1"
+$config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
 $org = $config.OrgUrl
 
@@ -128,7 +130,8 @@ $result = [PSCustomObject]@{
 }
 
 # --- Write docs/discovery-report.md -------------------------------------
-$reportPath = Join-Path $PSScriptRoot '..\docs\discovery-report.md'
+$reportFileName = if ($config.EnvironmentName -eq 'SI-DEV') { 'discovery-report.md' } else { "discovery-report.$($config.EnvironmentName).md" }
+$reportPath = Join-Path $PSScriptRoot "..\docs\$reportFileName"
 $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine("# Discovery Report — SI-DEV")
 [void]$sb.AppendLine()

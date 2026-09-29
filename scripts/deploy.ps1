@@ -45,18 +45,20 @@ param(
 
     [string[]] $OnlyRelationships,
 
-    [string[]] $OnlyKeys
+    [string[]] $OnlyKeys,
+
+    [string] $ConfigPath = "$PSScriptRoot\config.psd1"
 )
 
 $ErrorActionPreference = 'Stop'
 if (-not $DryRun -and -not $Apply) {
-    throw "Specify either -DryRun (plan only, no writes) or -Apply (write to SI-DEV). There is no implicit default - this is deliberate."
+    throw "Specify either -DryRun (plan only, no writes) or -Apply (write to the target environment). There is no implicit default - this is deliberate."
 }
 
 Import-Module "$PSScriptRoot\lib\Dataverse.psm1" -Force
 Import-Module powershell-yaml -Force
 
-$config = Import-PowerShellDataFile "$PSScriptRoot\config.psd1"
+$config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
 $org = $config.OrgUrl
 $script:baseLangCode = Get-DataverseBaseLanguageCode -OrgUrl $org

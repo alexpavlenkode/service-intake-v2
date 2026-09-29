@@ -8,13 +8,15 @@
         [PASS]/[FAIL] lines and a non-zero exit code on any failure.
 #>
 [CmdletBinding()]
-param()
+param(
+    [string] $ConfigPath = "$PSScriptRoot\config.psd1"
+)
 
 $ErrorActionPreference = 'Stop'
 Import-Module "$PSScriptRoot\lib\Dataverse.psm1" -Force
 Import-Module powershell-yaml -Force
 
-$config = Import-PowerShellDataFile "$PSScriptRoot\config.psd1"
+$config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
 $org = $config.OrgUrl
 
@@ -163,9 +165,14 @@ foreach ($role in $securitySpec.roles) {
         $missing.Count -eq 0
     }
 }
-Test-Check "Pre-existing V1 role 'SI Auditor' is untouched (still exists, distinct from our roles)" {
-    $v1 = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "roles?`$select=name&`$filter=name eq 'SI Auditor'"
-    $v1.value.Count -eq 1
+if ($config.EnvironmentName -eq 'SI-DEV') {
+    # V1 only ever existed in SI-DEV - this check is meaningless (and would
+    # be a false failure) against a clean environment like SI-TEST that
+    # never had V1 deployed to it.
+    Test-Check "Pre-existing V1 role 'SI Auditor' is untouched (still exists, distinct from our roles)" {
+        $v1 = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "roles?`$select=name&`$filter=name eq 'SI Auditor'"
+        $v1.value.Count -eq 1
+    }
 }
 
 # --- Status transition configuration data (Security Model phase) --------

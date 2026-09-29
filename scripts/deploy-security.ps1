@@ -18,7 +18,8 @@
 param(
     [Parameter(ParameterSetName = 'DryRun')] [switch] $DryRun,
     [Parameter(ParameterSetName = 'Apply')] [switch] $Apply,
-    [string[]] $OnlyRoles
+    [string[]] $OnlyRoles,
+    [string] $ConfigPath = "$PSScriptRoot\config.psd1"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,7 +30,7 @@ if (-not $DryRun -and -not $Apply) {
 Import-Module "$PSScriptRoot\lib\Dataverse.psm1" -Force
 Import-Module powershell-yaml -Force
 
-$config = Import-PowerShellDataFile "$PSScriptRoot\config.psd1"
+$config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
 $org = $config.OrgUrl
 
