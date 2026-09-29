@@ -192,6 +192,75 @@ a human glancing at exit codes alone would miss a real failure. First real
 run against this solution: 0 findings at every severity (Critical/High/
 Medium/Low/Informational).
 
+## One shared pipeline module, not two drifting implementations (review items 18-24, 2026-09)
+
+`scripts\demo-pipeline.ps1` (CLI, animated console) and
+`scripts\serve-live-console.ps1` (Live Console web server) each had their
+own, independently-maintained copy of the entire Ingest/Parse/Validate/
+Duplicate-Check/Decision pipeline. They had already drifted: the server's
+copy logged NO `hsv_processingattempt` rows at all (not even for
+successes), used its own keyword list for NOT_A_REQUEST instead of the same
+rule the CLI used, and worded messages differently. Fixed by extracting the
+actual logic into `scripts\lib\Pipeline.psm1` - `Invoke-ServiceIntakeMessage`
+is now the ONE place the business logic lives; both callers are thin
+adapters that only differ in how they PRESENT the result (animated console
+output vs a JSON stage list for the browser), not in what the result IS.
+
+Real bugs found and fixed as part of pulling this together:
+
+- **Item 20**: `serve-live-console.ps1`'s `/api/random` handler passed
+  `EmailGenerator.psm1`'s generated message straight into the per-message
+  call with no `ProviderMessageId` field at all - so even though the
+  `'technical_duplicate'` scenario correctly returns the SAME hashtable
+  reference as an earlier message (by design, that's what makes it a
+  genuine repeat), nothing ever stamped an id onto that shared object that
+  would survive to the second turn, and a fresh random id got invented
+  every time. The "technical duplicate" demo scenario in Live Console never
+  actually exercised the alternate key. Fixed by extracting the stamping
+  pattern `scripts\demo-pipeline.ps1` already had into
+  `Set-StampedProviderMessageId` in the shared module, used by both
+  callers now - confirmed live via `/api/random`: a real HTTP 400-class
+  alternate-key rejection now shows up in the batch results.
+- **Item 21**: `Get-OrCreateDemoServiceObject` looked up existing service
+  objects by `hsv_objectnumber` ALONE. Today's demo data happens to use
+  per-customer-prefixed numbers ("N-01", "S-01", ...) that don't collide,
+  but that's incidental - `hsv_ServiceObject_AccountObjectNumber` is a
+  COMPOSITE alternate key over `[hsv_Account, hsv_ObjectNumber]` precisely
+  because two different real customers can legitimately share an internal
+  object number. Fixed to filter on both. Proven live: the same object
+  number under two different accounts now correctly resolves to two
+  different `hsv_serviceobject` records.
+- **Item 22** ("use the composite alternate key directly where possible")
+  was attempted via Dataverse's documented PATCH-as-upsert-by-alternate-key
+  URL addressing (`hsv_serviceobjects(hsv_Account=<guid>,hsv_ObjectNumber='X')`),
+  which would have also closed the GET-then-POST race for free. NOT
+  possible in this environment: confirmed via raw `curl` (ruling out any
+  PowerShell/`Invoke-WebRequest` quirk) that this environment rejects
+  alternate-key URL addressing outright, even for the simplest possible
+  case - a single-attribute string key on a different table
+  (`hsv_workorders(hsv_WorkOrderNumber='WO-00001')`) - with the same "key
+  properties don't match" error despite genuinely matching the key's own
+  metadata. Documented in `Get-OrCreateDemoServiceObject`'s own comment
+  rather than chased further; the filter-based fix (item 21) is what
+  actually matters for correctness.
+- **Item 24**: `Invoke-DataverseApi` gained a `-ReturnRepresentation`
+  switch (sets `Prefer: return=representation`), which is what let every
+  remaining raw `Invoke-WebRequest` call in both scripts (there only to get
+  a created record's id back, which the wrapper couldn't do before) be
+  replaced with the one common wrapper - retry/429/error-parsing/UTF-8
+  body encoding now apply uniformly everywhere, not just to calls someone
+  remembered to route through it.
+- **Item 23** (shared OData escaping) was already done in an earlier pass
+  (`Format-ODataFilterValue` in `lib\Dataverse.psm1`) - confirmed still the
+  only escaping path in use after this refactor.
+
+`scripts\test-cantransition.ps1`, `test-idempotency.ps1`, and
+`run-access-test.ps1` don't use the shared pipeline module (they test
+narrower, specific mechanisms directly against the Web API, which is
+deliberate - they should keep exercising the platform's actual behavior
+independently of whatever the demo pipeline does) but all three were
+re-run after this refactor and still pass, along with `verify.ps1`.
+
 ## Resolved discrepancy: solution name
 
 The project prompt names the solution `HSVServiceIntakeV2` / "HSV Service

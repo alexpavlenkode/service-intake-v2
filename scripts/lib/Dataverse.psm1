@@ -74,6 +74,7 @@ function Invoke-DataverseApi {
         [switch] $MergeLabels,
         [string] $CallerObjectId,
         [hashtable] $AdditionalHeaders,
+        [switch] $ReturnRepresentation,
         [int] $MaxRetries = 4
     )
 
@@ -92,6 +93,12 @@ function Invoke-DataverseApi {
     if ($SolutionUniqueName) { $headers['MSCRM.SolutionUniqueName'] = $SolutionUniqueName }
     if ($MergeLabels)        { $headers['MSCRM.MergeLabels'] = 'true' }
     if ($CallerObjectId)     { $headers['CallerObjectId'] = $CallerObjectId }
+    # Without this, POST/PATCH return 204 No Content and the caller has no
+    # way to get the created/updated record's id or fields back - which is
+    # exactly why several scripts used to bypass this wrapper entirely and
+    # call Invoke-WebRequest directly (review item 24: one common wrapper
+    # for retry/429/error-parsing/logging, not two code paths).
+    if ($ReturnRepresentation) { $headers['Prefer'] = 'return=representation' }
     if ($AdditionalHeaders)  { foreach ($k in $AdditionalHeaders.Keys) { $headers[$k] = $AdditionalHeaders[$k] } }
 
     $attempt = 0

@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         Demo/visualization tool: sends one or more synthetic "emails" through
         the REAL Service Intake pipeline (genuine Dataverse calls at every
@@ -14,6 +14,12 @@
         business-key duplicate detection, work order creation, processing-
         attempt logging) is 100% real: it calls the same Dataverse tables and
         keys as the rest of this project, not a mockup.
+
+        The actual pipeline logic lives in scripts\lib\Pipeline.psm1, shared
+        with scripts\serve-live-console.ps1's Live Console (review items
+        18/19) - this script is now only the console-animation presentation
+        layer plus message-list building (Interactive/Random) and trace-file
+        writing.
 
         Every run writes a JSON trace to logs\demo-traces\ that
         scripts\generate-demo-report.ps1 turns into a clickable HTML
@@ -40,6 +46,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Import-Module "$PSScriptRoot\lib\Dataverse.psm1" -Force
 Import-Module "$PSScriptRoot\lib\EmailGenerator.psm1" -Force
+Import-Module "$PSScriptRoot\lib\Pipeline.psm1" -Force
 
 $config = Import-PowerShellDataFile $ConfigPath
 Connect-DataverseOrg -TenantId $config.TenantId
@@ -63,256 +70,44 @@ function Write-Pipeline {
     Write-Host ""
 }
 
-function Animate-Stage {
-    param([string[]] $StatusArray, [int] $Index, [string] $FinalStatus, [string] $Detail)
-    $StatusArray[$Index] = 'Active'
-    Write-Pipeline $StatusArray
-    Start-Sleep -Milliseconds 500
-    $StatusArray[$Index] = $FinalStatus
-    Write-Pipeline $StatusArray
-    if ($Detail) { Write-Host "    -> $Detail" -ForegroundColor Gray }
-    Start-Sleep -Milliseconds 300
-}
-
-# --- Demo master data (idempotent - reused across runs) --------------------
-function Get-OrCreateDemoAccount {
-    param([string] $Name)
-    $safeName = Format-ODataFilterValue "DEMO $Name"
-    $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "accounts?`$select=accountid&`$filter=name eq '$safeName'"
-    if ($existing.value.Count -gt 0) { return $existing.value[0].accountid }
-    $headers = @{ Authorization = "Bearer $(Get-DataverseToken -OrgUrl $org)"; Accept='application/json'; 'OData-MaxVersion'='4.0'; 'OData-Version'='4.0'; 'Content-Type'='application/json'; Prefer='return=representation' }
-    $r = Invoke-WebRequest -Uri "$org/api/data/v9.2/accounts" -Method Post -Headers $headers -Body (@{ name = "DEMO $Name" } | ConvertTo-Json) -UseBasicParsing
-    return ($r.Content | ConvertFrom-Json).accountid
-}
-
-function Get-OrCreateDemoServiceObject {
-    param([string] $AccountId, [string] $ObjectNumber, [string] $Street)
-    $safeObjectNumber = Format-ODataFilterValue $ObjectNumber
-    $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_serviceobjects?`$select=hsv_serviceobjectid&`$filter=hsv_objectnumber eq '$safeObjectNumber'"
-    if ($existing.value.Count -gt 0) { return $existing.value[0].hsv_serviceobjectid }
-    $headers = @{ Authorization = "Bearer $(Get-DataverseToken -OrgUrl $org)"; Accept='application/json'; 'OData-MaxVersion'='4.0'; 'OData-Version'='4.0'; 'Content-Type'='application/json'; Prefer='return=representation' }
-    $body = @{ hsv_name = "DEMO Object $ObjectNumber"; 'hsv_Account@odata.bind' = "/accounts($AccountId)"; hsv_objectnumber = $ObjectNumber; hsv_street = $Street; hsv_postalcode = '04109'; hsv_city = 'Leipzig' }
-    $r = Invoke-WebRequest -Uri "$org/api/data/v9.2/hsv_serviceobjects" -Method Post -Headers $headers -Body ($body | ConvertTo-Json) -UseBasicParsing
-    return ($r.Content | ConvertFrom-Json).hsv_serviceobjectid
-}
-
 $Trades = @(
     @{ Value = 209710501; Label = 'Sanitaer' }
     @{ Value = 209710502; Label = 'Elektro' }
     @{ Value = 209710503; Label = 'Heizung' }
 )
 
-function New-CorrelationLog {
-    param([string] $MessageId, [string] $CorrelationId, [int] $AttemptNumber, [int] $Stage, [int] $Result, [string] $ReasonCode, [string] $PreviousAttemptId)
-    $body = @{
-        hsv_inboundmessage = $MessageId
-        'hsv_InboundMessage@odata.bind' = "/hsv_inboundmessages($MessageId)"
-        hsv_correlationid = $CorrelationId
-        hsv_attemptnumber = $AttemptNumber
-        hsv_stage = $Stage
-        hsv_result = $Result
-        hsv_retryable = $false
-        hsv_triggeredby = 209710721  # Event
-        hsv_componentversion = '1.0.0.0'
-        hsv_startedon = (Get-Date).ToUniversalTime().ToString('o')
-    }
-    if ($ReasonCode) { $body['hsv_reasoncode'] = $ReasonCode }
-    if ($PreviousAttemptId) { $body['hsv_PreviousAttempt@odata.bind'] = "/hsv_processingattempts($PreviousAttemptId)" }
-    $body.Remove('hsv_inboundmessage')
-    $result = Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'hsv_processingattempts' -Body $body
-    return $result.hsv_processingattemptid
-}
-
-function Get-NextAttemptNumber {
-    # AttemptNumber counts processing attempts against a specific
-    # hsv_inboundmessage record, not against a single pipeline run's
-    # CorrelationId (each delivery/webhook call gets its own CorrelationId -
-    # see review item 26). Used when a technical duplicate delivery needs to
-    # be logged against the ALREADY-EXISTING message.
-    param([string] $MessageId)
-    $prior = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_processingattempts?`$filter=_hsv_inboundmessage_value eq $MessageId&`$select=hsv_attemptnumber,hsv_processingattemptid&`$orderby=hsv_attemptnumber desc&`$top=1"
-    if ($prior.value.Count -eq 0) { return @{ Number = 1; PreviousId = $null } }
-    return @{ Number = $prior.value[0].hsv_attemptnumber + 1; PreviousId = $prior.value[0].hsv_processingattemptid }
-}
-
-# hsv_stage values
-$StageIngest = 209710201; $StageParse = 209710202; $StageValidate = 209710203; $StageDupCheck = 209710204; $StageCreate = 209710205
-# hsv_result values
-$ResultSuccess = 209710301; $ResultBusinessException = 209710302; $ResultSkipped = 209710304
-# hsv_reasoncode values
-$ReasonMissingAddr = 209710401; $ReasonUnknownCustomer = 209710402; $ReasonNotARequest = 209710403; $ReasonPossibleDup = 209710404
-$ReasonTechnicalDuplicate = 209710410
-
-function Invoke-DemoMessage {
-    param([hashtable] $Msg, [int] $Index, [int] $Total)
-
-    $trace = [ordered]@{
-        index = $Index
-        input = $Msg
-        stages = @()
-        finalStatus = $null
-        finalDetail = $null
-    }
+# Maps Pipeline.psm1's neutral per-stage result (Pass/Warn/Duplicate) and
+# finalStatus onto this console's animation. The shared module returns the
+# WHOLE stage list at once (it isn't interactive/animated internally), so
+# the "live" per-stage animation here is played back stage-by-stage from
+# that list rather than driven by callbacks into the module - keeps
+# Pipeline.psm1 free of any console-specific concerns.
+function Show-AnimatedResult {
+    param([hashtable] $Result, [int] $Index, [int] $Total, [hashtable] $Msg)
 
     Write-Host ""
     Write-Host ("=" * 70) -ForegroundColor DarkCyan
-    Write-Host " Nachricht $Index/$Total : von $($Msg.FromAddress)" -ForegroundColor White
-    Write-Host " Betreff: $($Msg.Subject)" -ForegroundColor White
+    Write-Host " Nachricht $Index/$Total : von $($Msg['FromAddress'])" -ForegroundColor White
+    Write-Host " Betreff: $($Msg['Subject'])" -ForegroundColor White
     Write-Host ("=" * 70) -ForegroundColor DarkCyan
 
-    $status = @('Pending','Pending','Pending','Pending','Pending')
-    $correlationId = [guid]::NewGuid().ToString()
+    $status = @('Pending') * $Stages.Count
+    $stageIndexByName = @{ 'Ingest' = 0; 'Parse' = 1; 'Validate' = 2; 'Duplicate Check' = 3; 'Decision' = 4 }
 
-    # --- Stage 0: Ingest ----------------------------------------------------
-    Animate-Stage $status 0 'Active' $null
-    $headers = @{ Authorization = "Bearer $(Get-DataverseToken -OrgUrl $org)"; Accept='application/json'; 'OData-MaxVersion'='4.0'; 'OData-Version'='4.0'; 'Content-Type'='application/json'; Prefer='return=representation' }
-    $msgBody = @{
-        hsv_name = $Msg.Subject
-        hsv_providermessageid = $Msg.ProviderMessageId
-        hsv_correlationid = $correlationId
-        hsv_receivedon = (Get-Date).ToUniversalTime().ToString('o')
-        hsv_fromaddress = $Msg.FromAddress
-        hsv_subject = $Msg.Subject
-        hsv_body = $Msg.Body
-        hsv_hasattachments = $false
-        hsv_status = 209710001  # Received
-        hsv_extractionsource = 209710701  # Parser
-        hsv_requiresreview = $false
-        hsv_retrycount = 0
-    }
-
-    $inboundId = $null
-    try {
-        $r = Invoke-WebRequest -Uri "$org/api/data/v9.2/hsv_inboundmessages" -Method Post -Headers $headers -Body ($msgBody | ConvertTo-Json) -UseBasicParsing
-        $inboundId = ($r.Content | ConvertFrom-Json).hsv_inboundmessageid
-        $status[0] = 'Pass'
+    foreach ($s in $Result.stages) {
+        $idx = $stageIndexByName[$s.name]
+        $status[$idx] = 'Active'
         Write-Pipeline $status
-        Write-Host "    -> Nachricht angelegt (ID $inboundId), ProviderMessageId=$($Msg.ProviderMessageId)" -ForegroundColor Gray
-        $trace.stages += @{ name = 'Ingest'; result = 'Pass'; detail = "hsv_inboundmessage created ($inboundId)" }
-        New-CorrelationLog -MessageId $inboundId -CorrelationId $correlationId -AttemptNumber 1 -Stage $StageIngest -Result $ResultSuccess
-    } catch {
-        $status[0] = 'Fail'
+        Start-Sleep -Milliseconds 400
+        $status[$idx] = switch ($s.result) { 'Pass' { 'Pass' }; 'Warn' { 'Warn' }; 'Duplicate' { 'Fail' }; default { 'Fail' } }
         Write-Pipeline $status
-        $existing = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_inboundmessages?`$filter=hsv_providermessageid eq '$($Msg.ProviderMessageId)'&`$select=hsv_inboundmessageid"
-        $existingId = if ($existing.value.Count -gt 0) { $existing.value[0].hsv_inboundmessageid } else { $null }
-        Write-Host "    -> TECHNISCHES DUPLIKAT: ProviderMessageId '$($Msg.ProviderMessageId)' bereits verarbeitet (Record $existingId)." -ForegroundColor Yellow
-        Write-Host "    -> Dataverse selbst hat abgelehnt (Alternate Key)." -ForegroundColor DarkGray
-        # Review items 25/26: a second hsv_inboundmessage can never exist for
-        # this ProviderMessageId (the alternate key already refused it), so
-        # there is no second record to mark Duplicate. What actually
-        # happened - a repeat delivery of an already-processed message - is
-        # recorded as a new hsv_processingattempt against the ORIGINAL
-        # message instead, not silently dropped as a script-local trace
-        # entry that never reaches Dataverse.
-        if ($existingId) {
-            $next = Get-NextAttemptNumber -MessageId $existingId
-            New-CorrelationLog -MessageId $existingId -CorrelationId $correlationId -AttemptNumber $next.Number -Stage $StageIngest -Result $ResultSkipped -ReasonCode $ReasonTechnicalDuplicate -PreviousAttemptId $next.PreviousId | Out-Null
-            Write-Host "    -> hsv_processingattempt logged against $existingId (Attempt $($next.Number), Skipped/TECHNICAL_DUPLICATE)." -ForegroundColor DarkGray
-        }
-        $trace.stages += @{ name = 'Ingest'; result = 'Duplicate'; detail = "Rejected by alternate key - already exists as $existingId; logged as a new ProcessingAttempt (Skipped/TECHNICAL_DUPLICATE) against it" }
-        $trace.finalStatus = 'Duplicate'
-        $trace.finalDetail = "Provider-ID bereits verarbeitet ($existingId)"
-        return $trace
+        $color = switch ($s.result) { 'Pass' { 'Gray' }; 'Warn' { 'Yellow' }; default { 'Yellow' } }
+        Write-Host "    -> $($s.detail)" -ForegroundColor $color
+        Start-Sleep -Milliseconds 250
     }
 
-    # --- Stage 1: Parse ------------------------------------------------------
-    Animate-Stage $status 1 'Active' $null
-    Invoke-DataverseApi -OrgUrl $org -Method PATCH -Path "hsv_inboundmessages($inboundId)" -Body @{ hsv_status = 209710002 } | Out-Null  # Parsed
-    New-CorrelationLog -MessageId $inboundId -CorrelationId $correlationId -AttemptNumber 1 -Stage $StageParse -Result $ResultSuccess
-    $status[1] = 'Pass'
-    Write-Pipeline $status
-    Write-Host "    -> Kunde='$($Msg.CustomerName)' Objekt='$($Msg.ObjectNumber)' Gewerk=$($Msg.TradeLabel)" -ForegroundColor Gray
-    $trace.stages += @{ name = 'Parse'; result = 'Pass'; detail = "Customer=$($Msg.CustomerName), Object=$($Msg.ObjectNumber), Trade=$($Msg.TradeLabel)" }
-
-    # --- Stage 2: Validate -----------------------------------------------------
-    Animate-Stage $status 2 'Active' $null
-    if ($Msg.NotARequest) {
-        Invoke-DataverseApi -OrgUrl $org -Method PATCH -Path "hsv_inboundmessages($inboundId)" -Body @{ hsv_status = 209710007 } | Out-Null  # Not Relevant
-        New-CorrelationLog -MessageId $inboundId -CorrelationId $correlationId -AttemptNumber 1 -Stage $StageValidate -Result $ResultBusinessException -ReasonCode $ReasonNotARequest
-        $status[2] = 'Warn'
-        Write-Pipeline $status
-        Write-Host "    -> NICHT ZUSTAENDIG: keine Auftragsanfrage (Reason: NOT_A_REQUEST)" -ForegroundColor Yellow
-        $trace.stages += @{ name = 'Validate'; result = 'NotRelevant'; detail = 'NOT_A_REQUEST' }
-        $trace.finalStatus = 'Not Relevant'
-        $trace.finalDetail = 'Nachricht ist keine Auftragsanfrage.'
-        return $trace
-    }
-    if (-not $Msg.ObjectNumber) {
-        Invoke-DataverseApi -OrgUrl $org -Method PATCH -Path "hsv_inboundmessages($inboundId)" -Body @{ hsv_status = 209710004 } | Out-Null  # Needs Clarification
-        New-CorrelationLog -MessageId $inboundId -CorrelationId $correlationId -AttemptNumber 1 -Stage $StageValidate -Result $ResultBusinessException -ReasonCode $ReasonMissingAddr
-        $status[2] = 'Warn'
-        Write-Pipeline $status
-        Write-Host "    -> KLAERUNGSQUEUE: Objektadresse fehlt (Reason: MISSING_OBJECT_ADDRESS)" -ForegroundColor Yellow
-        $trace.stages += @{ name = 'Validate'; result = 'NeedsClarification'; detail = 'MISSING_OBJECT_ADDRESS' }
-        $trace.finalStatus = 'Needs Clarification'
-        $trace.finalDetail = 'Objektadresse fehlt - Rueckfrage an den Kunden noetig.'
-        return $trace
-    }
-    Invoke-DataverseApi -OrgUrl $org -Method PATCH -Path "hsv_inboundmessages($inboundId)" -Body @{ hsv_status = 209710003 } | Out-Null  # Validated
-    New-CorrelationLog -MessageId $inboundId -CorrelationId $correlationId -AttemptNumber 1 -Stage $StageValidate -Result $ResultSuccess
-    $status[2] = 'Pass'
-    Write-Pipeline $status
-    $trace.stages += @{ name = 'Validate'; result = 'Pass'; detail = 'All required fields present' }
-
-    # --- Stage 3: Duplicate check (business key) ------------------------------
-    Animate-Stage $status 3 'Active' $null
-    $businessKey = "$($Msg.CustomerName)|$($Msg.ObjectNumber)|$($Msg.Problem.ToLower().Trim())"
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    $hashBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($businessKey))
-    $businessKeyHash = ([System.BitConverter]::ToString($hashBytes) -replace '-', '').ToLower()
-
-    $cutoff = (Get-Date).ToUniversalTime().AddHours(-72).ToString('o')
-    $dupCheck = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "hsv_inboundmessages?`$filter=hsv_businesskeyhash eq '$businessKeyHash' and hsv_inboundmessageid ne $inboundId and hsv_receivedon gt $cutoff&`$select=hsv_inboundmessageid,hsv_name&`$top=1"
-
-    Invoke-DataverseApi -OrgUrl $org -Method PATCH -Path "hsv_inboundmessages($inboundId)" -Body @{ hsv_businesskey = $businessKey; hsv_businesskeyhash = $businessKeyHash } | Out-Null
-
-    if ($dupCheck.value.Count -gt 0) {
-        $matchId = $dupCheck.value[0].hsv_inboundmessageid
-        Invoke-DataverseApi -OrgUrl $org -Method PATCH -Path "hsv_inboundmessages($inboundId)" -Body @{ hsv_status = 209710005; hsv_matchreason = "Gleicher Kunde/Objekt/Inhalt wie Nachricht $matchId innerhalb 72h" } | Out-Null  # Potential Duplicate
-        New-CorrelationLog -MessageId $inboundId -CorrelationId $correlationId -AttemptNumber 1 -Stage $StageDupCheck -Result $ResultBusinessException -ReasonCode $ReasonPossibleDup
-        $status[3] = 'Warn'
-        Write-Pipeline $status
-        Write-Host "    -> POTENZIELLE DUBLETTE: aehnlich zu Nachricht $matchId (Reason: POSSIBLE_DUPLICATE)" -ForegroundColor Yellow
-        Write-Host "    -> Wartet auf Entscheidung des Disponenten - wird NICHT automatisch verworfen." -ForegroundColor DarkGray
-        $trace.stages += @{ name = 'Duplicate Check'; result = 'PotentialDuplicate'; detail = "Matches $matchId - POSSIBLE_DUPLICATE" }
-        $trace.finalStatus = 'Potential Duplicate'
-        $trace.finalDetail = "Aehnlich zu Nachricht $matchId - wartet auf menschliche Entscheidung."
-        return $trace
-    }
-    $status[3] = 'Pass'
-    Write-Pipeline $status
-    Write-Host "    -> keine fachliche Dublette im 72h-Fenster gefunden" -ForegroundColor Gray
-    $trace.stages += @{ name = 'Duplicate Check'; result = 'Pass'; detail = 'No business-key match in 72h window' }
-
-    # --- Stage 4: Decision / Create Work Order --------------------------------
-    Animate-Stage $status 4 'Active' $null
-    $accountId = Get-OrCreateDemoAccount -Name $Msg.CustomerName
-    $soId = Get-OrCreateDemoServiceObject -AccountId $accountId -ObjectNumber $Msg.ObjectNumber -Street $Msg.Street
-
-    $woHeaders = @{ Authorization = "Bearer $(Get-DataverseToken -OrgUrl $org)"; Accept='application/json'; 'OData-MaxVersion'='4.0'; 'OData-Version'='4.0'; 'Content-Type'='application/json'; Prefer='return=representation' }
-    $woBody = @{
-        hsv_title = $Msg.Subject
-        hsv_description = $Msg.Body
-        'hsv_Account@odata.bind' = "/accounts($accountId)"
-        'hsv_ServiceObject@odata.bind' = "/hsv_serviceobjects($soId)"
-        hsv_trade = $Msg.TradeValue
-        hsv_priority = 209710601  # Standard
-        hsv_status = 209710101    # Neu
-    }
-    $wr = Invoke-WebRequest -Uri "$org/api/data/v9.2/hsv_workorders" -Method Post -Headers $woHeaders -Body ($woBody | ConvertTo-Json) -UseBasicParsing
-    $woId = ($wr.Content | ConvertFrom-Json).hsv_workorderid
-
-    Invoke-DataverseApi -OrgUrl $org -Method PATCH -Path "hsv_inboundmessages($inboundId)" -Body @{ hsv_status = 209710009; 'hsv_WorkOrder@odata.bind' = "/hsv_workorders($woId)" } | Out-Null  # Converted
-    New-CorrelationLog -MessageId $inboundId -CorrelationId $correlationId -AttemptNumber 1 -Stage $StageCreate -Result $ResultSuccess
-
-    $status[4] = 'Pass'
-    Write-Pipeline $status
-    Write-Host "    -> AUFTRAG ANGELEGT: Work Order $woId (Status: Neu)" -ForegroundColor Green
-    $trace.stages += @{ name = 'Decision'; result = 'Converted'; detail = "Work Order $woId created" }
-    $trace.finalStatus = 'Converted'
-    $trace.finalDetail = "Work Order $woId (Neu) - bereit fuer Zuweisung."
-
-    return $trace
+    $finalColor = switch ($Result.finalStatus) { 'Converted' { 'Green' }; 'Duplicate' { 'Red' }; default { 'Yellow' } }
+    Write-Host "    -> $($Result.finalDetail)" -ForegroundColor $finalColor
 }
 
 # --- Build the message list -------------------------------------------------
@@ -328,7 +123,7 @@ if ($Interactive) {
     $trade = $Trades[(Get-Random -Minimum 0 -Maximum $Trades.Count)]
     $messages.Add(@{
         FromAddress = $from; Subject = $subject; Body = $body; CustomerName = $customer
-        ObjectNumber = $objNum; Street = 'Teststrasse'; Problem = $body
+        ObjectNumber = $objNum; Street = 'Teststrasse'
         TradeValue = $trade.Value; TradeLabel = $trade.Label
         ProviderMessageId = "DEMO-$([guid]::NewGuid().ToString().Substring(0,8))"
         NotARequest = $false
@@ -346,16 +141,16 @@ if ($Interactive) {
         $generated.Add($rm)
 
         # 'technical_duplicate' returns the SAME hashtable reference as an
-        # earlier generated message (by design, see EmailGenerator.psm1), so
-        # if that earlier iteration already stamped an AssignedProviderId on
-        # it, reusing it here is what actually exercises the alternate key.
-        $providerMessageId = if ($rm.AssignedProviderId) { $rm.AssignedProviderId } else { "DEMO-$([guid]::NewGuid().ToString().Substring(0,8))" }
-        $rm['AssignedProviderId'] = $providerMessageId
+        # earlier generated message (by design, see EmailGenerator.psm1);
+        # Set-StampedProviderMessageId (review item 20) is what makes that
+        # reuse actually exercise the alternate key - it stamps a fresh id
+        # the first time and returns the SAME id on every later reuse of
+        # that same hashtable reference.
+        $providerMessageId = Set-StampedProviderMessageId -Msg $rm -Prefix 'DEMO'
 
         $msg = @{
             FromAddress = $rm.From; Subject = $rm.Subject; Body = $rm.Body
             CustomerName = $rm.CustomerName; ObjectNumber = $rm.ObjectNumber; Street = $rm.Street
-            Problem = $rm.Body
             TradeValue = $rm.TradeValue; TradeLabel = $rm.TradeLabel
             ProviderMessageId = $providerMessageId
             NotARequest = ($scenario -eq 'not_a_request')
@@ -369,7 +164,15 @@ $traces = New-Object System.Collections.Generic.List[object]
 $i = 0
 foreach ($m in $messages) {
     $i++
-    $traces.Add((Invoke-DemoMessage -Msg $m -Index $i -Total $messages.Count))
+    $result = Invoke-ServiceIntakeMessage -OrgUrl $org -Msg $m
+    Show-AnimatedResult -Result $result -Index $i -Total $messages.Count -Msg $m
+    $traces.Add([ordered]@{
+        index = $i
+        input = $m
+        stages = $result.stages
+        finalStatus = $result.finalStatus
+        finalDetail = $result.finalDetail
+    })
 }
 
 Write-Host ""
