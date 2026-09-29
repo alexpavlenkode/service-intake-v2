@@ -377,17 +377,47 @@ tables:
         type: String
         maxLength: 50
         requiredLevel: Required
+        description: >
+          Human-readable label, for display in views/forms only. NOT
+          authoritative - CanTransitionPlugin reads hsv_FromStatusValue
+          instead (review item 13, 2026-09). "(none)" for the two Create-time
+          initial-state rows (see hsv_FromStatusValue).
       - schemaName: hsv_ToStatus
         type: String
         maxLength: 50
         requiredLevel: Required
+        description: Human-readable label, for display only - see hsv_FromStatus.
+      - schemaName: hsv_FromStatusValue
+        type: WholeNumber
+        requiredLevel: Required
+        description: >
+          Added 2026-09 (review items 12/13). The actual hsv_WorkOrderStatus
+          or hsv_MessageStatus Choice numeric value this row's "from" state
+          represents - CanTransitionPlugin queries by this column directly,
+          doing no number<->label translation of its own. Sentinel value 0
+          (not a real Choice value in either option set - both start at
+          209710xxx) means "record does not exist yet", i.e. this row
+          governs what hsv_status is allowed to be set to on Create.
+      - schemaName: hsv_ToStatusValue
+        type: WholeNumber
+        requiredLevel: Required
+        description: The Choice numeric value this row's "to" state represents - see hsv_FromStatusValue.
       - schemaName: hsv_AllowedTrigger
         type: Choice
         localOptions: hsv_AllowedTrigger
         requiredLevel: Required
         description: >
-          PLACEHOLDER VALUES - see the flag at the top of this file and
-          docs/discovery-report.md. Confirm before Phase B.
+          DECISION (review item 14, 2026-09): kept as descriptive/reporting
+          metadata (who typically causes this transition), NOT enforced by
+          CanTransitionPlugin. The underlying local option set values were
+          never confirmed against a source doc (see the PLACEHOLDER flag at
+          the top of this file / docs/discovery-report.md), and the plugin
+          has no reliable way to map context.InitiatingUserId to one of
+          these four abstract trigger roles (a user's security role isn't
+          the same thing as "which of these four labels applies"). Enforcing
+          an unconfirmed, unmappable rule would be worse than not enforcing
+          it. Revisit only if the values get confirmed AND a real
+          role->trigger mapping is defined.
       - schemaName: hsv_IsActive
         type: Boolean
         requiredLevel: Required

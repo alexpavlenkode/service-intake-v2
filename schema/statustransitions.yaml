@@ -21,8 +21,22 @@
 # reach Storniert. Modeled here as reachable from Neu, Zugewiesen, and In
 # Arbeit (i.e. any non-terminal state) - flagged, confirm before relying on
 # this in a validator.
+#
+# fromStatus: "(none)" rows (added 2026-09, review item 15/16): these are
+# not real state transitions - they encode the one status value each entity
+# is allowed to have on Create. seed-statustransitions.ps1 maps "(none)" to
+# the sentinel hsv_FromStatusValue = 0 (not a real Choice value in either
+# option set). CanTransitionPlugin now validates Create the same way it
+# validates Update - by treating "record doesn't exist yet" as fromStatus
+# value 0 - so these rows ARE where that rule lives, per review item 12's
+# instruction to make hsv_statustransition the actual source of rules
+# rather than hardcoding it in the plugin.
 
 messageTransitions:
+  - fromStatus: "(none)"
+    toStatus: Received
+    trigger: System
+    reason: Initial status required on Create (docs/01-prozessbeschreibung.md §5.1 - every message starts Received).
   - fromStatus: Received
     toStatus: Parsed
     trigger: System
@@ -93,6 +107,10 @@ messageTransitions:
     reason: manueller Replay durch Plattformbetreuer
 
 workOrderTransitions:
+  - fromStatus: "(none)"
+    toStatus: Neu
+    trigger: System
+    reason: Initial status required on Create (docs/01-prozessbeschreibung.md §5.2 - every work order starts Neu).
   - fromStatus: Neu
     toStatus: Zugewiesen
     trigger: Disponent

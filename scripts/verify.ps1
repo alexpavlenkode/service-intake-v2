@@ -336,19 +336,21 @@ if ($asm.value.Count -eq 1) {
 }
 
 foreach ($entity in @('hsv_workorder', 'hsv_inboundmessage')) {
-    $stepName = "CanTransitionPlugin: Update of $entity (Pre-Operation)"
-    $step = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessageprocessingsteps?`$select=sdkmessageprocessingstepid,stage,mode,filteringattributes,statecode&`$filter=name eq '$stepName'"
-    Test-Check "Plugin step '$stepName' exists as Pre-Operation (stage 20), Synchronous, Active, filtered on hsv_status" {
-        if ($step.value.Count -ne 1) { return $false }
-        $s = $step.value[0]
-        ($s.stage -eq 20) -and ($s.mode -eq 0) -and ($s.statecode -eq 0) -and ($s.filteringattributes -match 'hsv_status')
-    }
-    if ($step.value.Count -eq 1) {
-        $stepId = $step.value[0].sdkmessageprocessingstepid
-        Test-Check "Plugin step '$stepName' has a PreImage containing hsv_status" {
-            $img = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessageprocessingstepimages?`$select=attributes,imagetype&`$filter=name eq 'PreImage' and _sdkmessageprocessingstepid_value eq $stepId"
-            if ($img.value.Count -ne 1) { return $false }
-            ($img.value[0].imagetype -eq 0) -and ($img.value[0].attributes -match 'hsv_status')
+    foreach ($msgName in @('Create', 'Update')) {
+        $stepName = "CanTransitionPlugin: $msgName of $entity (Pre-Operation)"
+        $step = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessageprocessingsteps?`$select=sdkmessageprocessingstepid,stage,mode,filteringattributes,statecode&`$filter=name eq '$stepName'"
+        Test-Check "Plugin step '$stepName' exists as Pre-Operation (stage 20), Synchronous, Active, filtered on hsv_status" {
+            if ($step.value.Count -ne 1) { return $false }
+            $s = $step.value[0]
+            ($s.stage -eq 20) -and ($s.mode -eq 0) -and ($s.statecode -eq 0) -and ($s.filteringattributes -match 'hsv_status')
+        }
+        if ($msgName -eq 'Update' -and $step.value.Count -eq 1) {
+            $stepId = $step.value[0].sdkmessageprocessingstepid
+            Test-Check "Plugin step '$stepName' has a PreImage containing hsv_status" {
+                $img = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessageprocessingstepimages?`$select=attributes,imagetype&`$filter=name eq 'PreImage' and _sdkmessageprocessingstepid_value eq $stepId"
+                if ($img.value.Count -ne 1) { return $false }
+                ($img.value[0].imagetype -eq 0) -and ($img.value[0].attributes -match 'hsv_status')
+            }
         }
     }
 }

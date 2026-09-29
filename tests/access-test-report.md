@@ -1,6 +1,6 @@
 ﻿# Row-Level Security Access Test
 
-Run: 2026-09-29 21:25 (local)
+Run: 2026-09-29 21:46 (local)
 
 **Setup note**: SI-DEV is a Developer Plan environment with exactly one
 licensed interactive human user. A second real browser session isn't
@@ -11,9 +11,9 @@ privilege-evaluation path Dataverse uses for every caller - it does
 NOT demonstrate an actual second browser hitting a direct record URL,
 since no second license exists to do that with.
 
-[INFO] Test Account created: 3ac01388-3bbc-f111-aaad-002248d8a892
-[INFO] Test Service Object created: 3bc01388-3bbc-f111-aaad-002248d8a892
-[INFO] Test Work Order created: 3cc01388-3bbc-f111-aaad-002248d8a892 (owned by System Administrator, owner A)
+[INFO] Test Account created: d825447c-3ebc-f111-aaad-002248d8a892
+[INFO] Test Service Object created: d925447c-3ebc-f111-aaad-002248d8a892
+[INFO] Test Work Order created: 134c4682-3ebc-f111-aaad-002248d8a892 (owned by System Administrator, owner A)
 
 ## Before reassignment (Work Order owned by Owner A)
 
@@ -40,6 +40,12 @@ access too (i.e. also a Techniker), which isn't demonstrable without a
 second real user or a second Application User configured with a
 *non*-admin role - not done here, flagged rather than assumed.
 
+## Create-time status validation (hsv_statustransition as source of truth, not a plugin constant)
+
+[PASS] Creating a hsv_workorder directly in status 'Zugewiesen' correctly blocked (only 'Neu' is a valid initial status).
+[PASS] Creating a hsv_workorder in status 'Neu' (the configured initial status) succeeds.
+[PASS] Creating a hsv_inboundmessage directly in status 'Parsed' correctly blocked (only 'Received' is a valid initial status).
+
 ## Cleanup
 
-[INFO] Test Work Order, Service Object, and Account deleted.
+[INFO] Test Work Order(s), Service Object, and Account deleted.

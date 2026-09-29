@@ -1,6 +1,6 @@
 ﻿# CanTransition Plugin Integration Test
 
-Run: 2026-09-29 17:42 (local)
+Run: 2026-09-29 21:47 (local)
 
 Tests Hsv.ServiceIntake.Plugins.CanTransitionPlugin, a Pre-Operation
 Update plugin on hsv_workorder and hsv_inboundmessage. Every call here

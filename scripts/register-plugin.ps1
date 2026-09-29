@@ -1,7 +1,8 @@
 <#
     .SYNOPSIS
         Registers Hsv.ServiceIntake.Plugins.CanTransitionPlugin as a
-        Pre-Operation Update step (with a hsv_status Pre-Image) on
+        Pre-Operation step (with a hsv_status Pre-Image on Update only - a
+        Create has no prior state) on both Create and Update of
         hsv_workorder and hsv_inboundmessage. Idempotent: re-running updates
         the assembly content if the dll changed, and skips steps/images that
         already exist by name.
@@ -85,20 +86,25 @@ if ($existingType.value.Count -eq 0) {
 }
 $typeId = $existingType.value[0].plugintypeid
 
-# --- 3. SDK message (Update) and per-entity filters ------------------------
-$updateMsg = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessages?`$select=sdkmessageid&`$filter=name eq 'Update'"
-$updateMsgId = $updateMsg.value[0].sdkmessageid
+# --- 3. SDK messages (Create, Update) and per-entity filters ---------------
+function Get-SdkMessageId {
+    param([string] $MessageName)
+    $msg = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessages?`$select=sdkmessageid&`$filter=name eq '$MessageName'"
+    return $msg.value[0].sdkmessageid
+}
+$createMsgId = Get-SdkMessageId 'Create'
+$updateMsgId = Get-SdkMessageId 'Update'
 
 function Register-StepForEntity {
-    param([string] $EntityLogicalName)
+    param([string] $EntityLogicalName, [string] $MessageName, [string] $MessageId, [bool] $WithPreImage)
 
-    $filter = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessagefilters?`$select=sdkmessagefilterid&`$filter=primaryobjecttypecode eq '$EntityLogicalName' and _sdkmessageid_value eq $updateMsgId"
+    $filter = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessagefilters?`$select=sdkmessagefilterid&`$filter=primaryobjecttypecode eq '$EntityLogicalName' and _sdkmessageid_value eq $MessageId"
     if ($filter.value.Count -eq 0) {
-        throw "No sdkmessagefilter found for Update on '$EntityLogicalName' - unexpected, check the entity is fully published."
+        throw "No sdkmessagefilter found for $MessageName on '$EntityLogicalName' - unexpected, check the entity is fully published."
     }
     $filterId = $filter.value[0].sdkmessagefilterid
 
-    $stepName = "CanTransitionPlugin: Update of $EntityLogicalName (Pre-Operation)"
+    $stepName = "CanTransitionPlugin: $MessageName of $EntityLogicalName (Pre-Operation)"
     $existingStep = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessageprocessingsteps?`$select=sdkmessageprocessingstepid&`$filter=name eq '$stepName'"
 
     if ($existingStep.value.Count -gt 0) {
@@ -107,7 +113,7 @@ function Register-StepForEntity {
     } else {
         $stepBody = @{
             name                    = $stepName
-            'sdkmessageid@odata.bind'          = "/sdkmessages($updateMsgId)"
+            'sdkmessageid@odata.bind'          = "/sdkmessages($MessageId)"
             'sdkmessagefilterid@odata.bind'    = "/sdkmessagefilters($filterId)"
             'plugintypeid@odata.bind'          = "/plugintypes($typeId)"
             stage                   = 20   # Pre-Operation
@@ -121,6 +127,12 @@ function Register-StepForEntity {
         $lookup = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessageprocessingsteps?`$select=sdkmessageprocessingstepid&`$filter=name eq '$stepName'"
         $stepId = $lookup.value[0].sdkmessageprocessingstepid
         Write-Output "[CREATE] Step '$stepName' created."
+    }
+
+    if (-not $WithPreImage) {
+        # Create has no prior state - CanTransitionPlugin treats "record
+        # doesn't exist yet" as a sentinel value instead (see the .cs file).
+        return
     }
 
     $existingImage = Invoke-DataverseApi -OrgUrl $org -Method GET -Path "sdkmessageprocessingstepimages?`$select=sdkmessageprocessingstepimageid&`$filter=name eq 'PreImage' and _sdkmessageprocessingstepid_value eq $stepId"
@@ -140,8 +152,10 @@ function Register-StepForEntity {
     }
 }
 
-Register-StepForEntity 'hsv_workorder'
-Register-StepForEntity 'hsv_inboundmessage'
+foreach ($entity in @('hsv_workorder', 'hsv_inboundmessage')) {
+    Register-StepForEntity $entity 'Create' $createMsgId $false
+    Register-StepForEntity $entity 'Update' $updateMsgId $true
+}
 
 Write-Output ""
 Write-Output "=== DONE ==="

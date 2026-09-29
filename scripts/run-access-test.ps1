@@ -224,15 +224,56 @@ Log "access too (i.e. also a Techniker), which isn't demonstrable without a"
 Log "second real user or a second Application User configured with a"
 Log "*non*-admin role - not done here, flagged rather than assumed."
 
+# --- 6d/6e/6f. Create-time status validation (review items 12/13/15/16) --
+# Run as System Administrator (Alex), not Techniker B - Create rights on
+# hsv_workorder/hsv_inboundmessage aren't the thing under test here, the
+# INITIAL STATUS rule is. CanTransitionPlugin now validates Create the same
+# way as Update, by treating "record doesn't exist yet" as
+# hsv_fromstatusvalue = 0 (see schema/tables.yaml and the plugin's own
+# comments) - these rows in hsv_statustransition are the actual source of
+# truth, not a hardcoded constant in the plugin.
+Log ""
+Log "## Create-time status validation (hsv_statustransition as source of truth, not a plugin constant)"
+Log ""
+$createTestWoId = $null
+try {
+    Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'hsv_workorders' -Body @{ hsv_title = 'ACCESS-TEST Create-validation (should fail)'; hsv_status = 209710102 } | Out-Null
+    Log "[FAIL] Creating a hsv_workorder directly in status 'Zugewiesen' (skipping 'Neu') was NOT blocked."
+} catch {
+    if ($_.Exception.Message -match 'INVALID_TRANSITION') {
+        Log "[PASS] Creating a hsv_workorder directly in status 'Zugewiesen' correctly blocked (only 'Neu' is a valid initial status)."
+    } else {
+        Log "[FAIL] Blocked, but not for the expected reason: $($_.Exception.Message)"
+    }
+}
+try {
+    $createTestWo = Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'hsv_workorders' -Body @{ hsv_title = 'ACCESS-TEST Create-validation (should succeed)'; hsv_status = 209710101 }
+    $createTestWoId = $createTestWo.hsv_workorderid
+    Log "[PASS] Creating a hsv_workorder in status 'Neu' (the configured initial status) succeeds."
+} catch {
+    Log "[FAIL] Creating a hsv_workorder in status 'Neu' was unexpectedly blocked: $($_.Exception.Message)"
+}
+try {
+    Invoke-DataverseApi -OrgUrl $org -Method POST -Path 'hsv_inboundmessages' -Body @{ hsv_name = 'ACCESS-TEST Create-validation MSG'; hsv_providermessageid = "access-test-create-val-$(New-Guid)"; hsv_status = 209710002 } | Out-Null
+    Log "[FAIL] Creating a hsv_inboundmessage directly in status 'Parsed' (skipping 'Received') was NOT blocked."
+} catch {
+    if ($_.Exception.Message -match 'INVALID_TRANSITION') {
+        Log "[PASS] Creating a hsv_inboundmessage directly in status 'Parsed' correctly blocked (only 'Received' is a valid initial status)."
+    } else {
+        Log "[FAIL] Blocked, but not for the expected reason: $($_.Exception.Message)"
+    }
+}
+
 # --- 7. Cleanup -------------------------------------------------------
 Log ""
 Log "## Cleanup"
 Log ""
 try {
     Invoke-DataverseApi -OrgUrl $org -Method DELETE -Path "hsv_workorders($woId)" | Out-Null
+    if ($createTestWoId) { Invoke-DataverseApi -OrgUrl $org -Method DELETE -Path "hsv_workorders($createTestWoId)" | Out-Null }
     Invoke-DataverseApi -OrgUrl $org -Method DELETE -Path "hsv_serviceobjects($($serviceObject.hsv_serviceobjectid))" | Out-Null
     Invoke-DataverseApi -OrgUrl $org -Method DELETE -Path "accounts($($account.accountid))" | Out-Null
-    Log "[INFO] Test Work Order, Service Object, and Account deleted."
+    Log "[INFO] Test Work Order(s), Service Object, and Account deleted."
 } catch {
     Log "[WARNING] Cleanup failed - remove test records manually. $($_.Exception.Message)"
 }

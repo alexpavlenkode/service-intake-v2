@@ -68,6 +68,41 @@ through the same `Invoke-DataverseApi` helper as everything else in this
 project, not the Plugin Registration Tool - consistent with the project's
 "everything scripted, nothing manual" approach.
 
+**hsv_statustransition made the real source of rules, Create validated too
+(review items 12/13/15/16, 2026-09)**: originally the plugin held two
+hardcoded `Dictionary<int, string>` maps (Choice value -> label) and queried
+`hsv_statustransition` by matching text labels stored in `hsv_FromStatus`/
+`hsv_ToStatus` (String columns) - i.e. the plugin, not the table, was the
+real source of truth for what a status value even *is*. Fixed by adding
+`hsv_FromStatusValue`/`hsv_ToStatusValue` (WholeNumber) columns holding the
+actual Choice numeric values directly; the plugin now queries by those two
+integers with zero label translation and zero hardcoded Choice values of
+its own. `hsv_FromStatus`/`hsv_ToStatus` (text) are kept, but purely for
+human-readable display in views/forms.
+
+The plugin is now also registered on **Create** (previously Update only),
+validated by the exact same code path as Update: "the record doesn't exist
+yet" is modeled as `hsv_FromStatusValue = 0`, a sentinel that isn't a real
+Choice value in either option set (both start at `209710xxx`). Two rows
+were added to `hsv_statustransition` - `(none) -> Neu` for hsv_workorder,
+`(none) -> Received` for hsv_inboundmessage - which is where the "what's a
+valid initial status" rule actually lives now, not a hardcoded constant in
+the plugin. Create has no pre-image (nothing existed before it), so no
+Pre-Image is registered on the Create step - only on Update.
+
+`hsv_AllowedTrigger` (review item 14): kept as descriptive/reporting
+metadata, explicitly NOT enforced - see the DECISION note on that column in
+`schema/tables.yaml` for why (its local option-set values were never
+confirmed against a source doc, and there's no reliable way to map
+`context.InitiatingUserId` to one of its four abstract role labels).
+
+`deploy.ps1` previously only created columns as part of creating a brand
+new table - adding `hsv_FromStatusValue`/`hsv_ToStatusValue` to the
+already-existing `hsv_statustransition` table exposed that gap. Fixed:
+`deploy.ps1` now diffs an existing table's non-Lookup columns against
+`tables.yaml` and creates whatever's missing, the same way it already
+diffed relationships.
+
 ## Resolved discrepancy: solution name
 
 The project prompt names the solution `HSVServiceIntakeV2` / "HSV Service

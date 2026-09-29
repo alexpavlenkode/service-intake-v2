@@ -278,7 +278,30 @@ if ($OnlyTables) { $tablesToProcess = $tablesSpec.tables | Where-Object { $_.log
 
 foreach ($table in $tablesToProcess) {
     if ($table.logicalName -in $existingLogicalNames) {
-        Add-PlanItem 'Table' $table.logicalName 'VERIFY' 'already exists - column-level diff not checked by this pass, see verify.ps1'
+        Add-PlanItem 'Table' $table.logicalName 'VERIFY' 'already exists'
+
+        # Diff non-Lookup columns against tables.yaml and create any that are
+        # missing. Added 2026-09: this gap let hsv_statustransition's
+        # FromStatusValue/ToStatusValue columns go undetected when schema
+        # authoring got ahead of what was actually deployed - see
+        # docs/architecture.md. Lookup columns are NOT diffed here - they're
+        # created together with their relationship, see the Relationships
+        # section below, which already diffs against existing relationships.
+        $existingAttrNames = (Invoke-DataverseApi -OrgUrl $org -Method GET -Path "EntityDefinitions(LogicalName='$($table.logicalName)')/Attributes?`$select=LogicalName").value.LogicalName
+        foreach ($col in ($table.columns | Where-Object { $_.type -ne 'Lookup' })) {
+            $colLogicalName = $col.schemaName.ToLower()
+            if ($colLogicalName -in $existingAttrNames) {
+                continue
+            }
+            Add-PlanItem 'Column' "$($table.logicalName).$($col.schemaName)" 'CREATE' 'missing column on an existing table'
+            if ($Apply) {
+                $body = New-DataverseAttributeBody -col $col -LangCode $script:baseLangCode -GlobalChoiceIds $globalChoiceIds
+                if ($body) {
+                    Invoke-DataverseApi -OrgUrl $org -Method POST -Path "EntityDefinitions(LogicalName='$($table.logicalName)')/Attributes" -Body $body -SolutionUniqueName $config.SolutionUniqueName | Out-Null
+                    Write-Output "[CREATE] Column '$($table.logicalName).$($col.schemaName)' created."
+                }
+            }
+        }
         continue
     }
 
