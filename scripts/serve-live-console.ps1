@@ -77,22 +77,6 @@ function Test-IsNotARequest {
     return $false
 }
 
-function ConvertTo-JsonSafe {
-    # PowerShell 5.1's ConvertTo-Json collapses a 1-element array into a
-    # bare JSON object instead of a single-element JSON array WHEN THAT
-    # ARRAY IS PIPED IN (pipeline enumeration invokes it once per element,
-    # so it never sees "an array" at all for a 1-item input) - this is what
-    # broke the browser with "results is not iterable" whenever exactly one
-    # message was sent via /api/random. -InputObject avoids the pipeline
-    # collapse for the TOP-LEVEL value, which is the only place this
-    # function is used (nested array properties inside an object are
-    # serialized correctly regardless of element count - the bug is
-    # specifically a pipeline-enumeration artifact, not a general
-    # single-element-array problem).
-    param([Parameter(Mandatory)] $InputObject, [int] $Depth = 10)
-    ConvertTo-Json -InputObject $InputObject -Depth $Depth
-}
-
 function Invoke-RealMessage {
     param([hashtable] $Msg)
     $result = Invoke-ServiceIntakeMessage -OrgUrl $org -Msg $Msg
@@ -118,6 +102,12 @@ function Invoke-RealMessage {
 # varied greetings/closings) so 100 generated messages don't read as an
 # obvious repeated loop. Shared with demo-pipeline.ps1's -Random mode.
 $script:generatedMessages = New-Object System.Collections.Generic.List[hashtable]
+# Drive Get-ScenarioForIndex the same way the old single-shot /api/random
+# loop did, just spread across separate /api/random-one calls now - persists
+# across calls (and across separate button clicks) like $generatedMessages
+# already did.
+$script:randomIndex = 0
+$script:randomCleanCount = 0
 
 # --- HTTP server -------------------------------------------------------------
 $pageTemplate = Get-Content -Path (Join-Path $ScriptDir 'live-console-page.html') -Raw -Encoding UTF8
@@ -156,41 +146,45 @@ try {
                 $res.ContentLength64 = $bytes.Length
                 $res.OutputStream.Write($bytes, 0, $bytes.Length)
             }
-            elseif ($req.HttpMethod -eq 'POST' -and $req.Url.AbsolutePath -eq '/api/random') {
-                $reader = New-Object System.IO.StreamReader($req.InputStream, $req.ContentEncoding)
-                $body = $reader.ReadToEnd() | ConvertFrom-Json
-                $count = [Math]::Max(1, [Math]::Min(200, [int]$body.count))
-                $results = New-Object System.Collections.Generic.List[object]
-                $cleanCount = 0
-                for ($i = 0; $i -lt $count; $i++) {
-                    $scenario = Get-ScenarioForIndex -Index $i -PreviousCleanCount $cleanCount
-                    $rm = New-RealisticMessage -Scenario $scenario -PreviousMessages $script:generatedMessages
-                    if ($rm.Scenario -eq 'clean') { $cleanCount++ }
-                    $script:generatedMessages.Add($rm)
+            elseif ($req.HttpMethod -eq 'POST' -and $req.Url.AbsolutePath -eq '/api/random-one') {
+                # One message per HTTP call, not one call for the whole batch
+                # (was /api/random with a {count} body) - a single request
+                # that loops server-side over N messages gives the browser
+                # NOTHING back until every single one of them has done its
+                # several real Dataverse round-trips, which for anything
+                # much above ~10 looks indistinguishable from having hung.
+                # The frontend now calls this endpoint N times in its own
+                # loop and updates the page after every response, so
+                # progress is visible in real time regardless of batch size.
+                # $script:randomIndex/$script:randomCleanCount persist across
+                # calls (and across separate button clicks, same as
+                # $script:generatedMessages already did) so
+                # Get-ScenarioForIndex's distribution and the "first message
+                # is always clean" rule still work the same as the old
+                # single-shot loop did.
+                $scenario = Get-ScenarioForIndex -Index $script:randomIndex -PreviousCleanCount $script:randomCleanCount
+                $rm = New-RealisticMessage -Scenario $scenario -PreviousMessages $script:generatedMessages
+                if ($rm.Scenario -eq 'clean') { $script:randomCleanCount++ }
+                $script:randomIndex++
+                $script:generatedMessages.Add($rm)
 
-                    # Review item 20: 'technical_duplicate' returns the SAME
-                    # hashtable reference as an earlier generated message -
-                    # Set-StampedProviderMessageId is what makes that reuse
-                    # actually collide against the alternate key instead of
-                    # each turn inventing its own fresh id (the bug: this
-                    # loop used to pass $rm straight into Invoke-RealMessage,
-                    # which had no ProviderMessageId field to find and so
-                    # always generated a new random one, silently defeating
-                    # the whole point of the duplicate scenario).
-                    $providerMessageId = Set-StampedProviderMessageId -Msg $rm -Prefix 'LIVE'
+                # Review item 20: 'technical_duplicate' returns the SAME
+                # hashtable reference as an earlier generated message -
+                # Set-StampedProviderMessageId is what makes that reuse
+                # actually collide against the alternate key instead of
+                # each turn inventing its own fresh id.
+                $providerMessageId = Set-StampedProviderMessageId -Msg $rm -Prefix 'LIVE'
 
-                    $m = @{
-                        FromAddress = $rm.From; Subject = $rm.Subject; Body = $rm.Body
-                        CustomerName = $rm.CustomerName; ObjectNumber = $rm.ObjectNumber; Street = $rm.Street
-                        TradeValue = $rm.TradeValue; TradeLabel = $rm.TradeLabel
-                        ProviderMessageId = $providerMessageId
-                        NotARequest = ($scenario -eq 'not_a_request')
-                    }
-                    $r = Invoke-RealMessage -Msg $m
-                    $r['input'] = $m
-                    $results.Add($r)
+                $m = @{
+                    From = $rm.From; FromAddress = $rm.From; Subject = $rm.Subject; Body = $rm.Body
+                    CustomerName = $rm.CustomerName; ObjectNumber = $rm.ObjectNumber; Street = $rm.Street
+                    TradeValue = $rm.TradeValue; TradeLabel = $rm.TradeLabel
+                    ProviderMessageId = $providerMessageId
+                    NotARequest = ($scenario -eq 'not_a_request')
                 }
-                $json = ConvertTo-JsonSafe -InputObject $results.ToArray()
+                $r = Invoke-RealMessage -Msg $m
+                $r['input'] = $m
+                $json = $r | ConvertTo-Json -Depth 10
                 $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
                 $res.ContentType = 'application/json; charset=utf-8'
                 $res.ContentLength64 = $bytes.Length

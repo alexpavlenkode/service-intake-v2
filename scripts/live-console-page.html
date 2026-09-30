@@ -205,8 +205,8 @@ async function apiSend(msg) {
   if (!resp.ok) { const e = await resp.json().catch(()=>({error:'Unbekannter Fehler'})); throw new Error(e.error || ('HTTP ' + resp.status)); }
   return resp.json();
 }
-async function apiRandom(count) {
-  const resp = await fetch('/api/random', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ count }) });
+async function apiRandomOne() {
+  const resp = await fetch('/api/random-one', { method: 'POST' });
   if (!resp.ok) { const e = await resp.json().catch(()=>({error:'Unbekannter Fehler'})); throw new Error(e.error || ('HTTP ' + resp.status)); }
   return resp.json();
 }
@@ -240,20 +240,25 @@ document.getElementById('btnAuto').addEventListener('click', async () => {
   const btn = document.getElementById('btnAuto');
   const origLabel = btn.textContent;
   setBusy(true);
-  btn.textContent = n > 10 ? `Sende ${n} Nachrichten an SI-DEV ...` : origLabel;
+  // One request PER message (not one request for the whole batch) - each
+  // message does several real Dataverse round-trips, so a single big
+  // request left the page looking frozen for anything much above 10 with
+  // zero feedback until the entire batch finally came back. Looping here
+  // instead means the page updates after every message completes, and the
+  // button label always shows real progress ("3/14 ..."), regardless of
+  // batch size.
+  const animate = n <= 10;
+  const counts = {};
   try {
-    const results = await apiRandom(n);
-    // Full flight animation only makes sense to watch for small batches;
-    // for a real load test (50-200) just stream results into the log fast.
-    const animate = n <= 10;
-    for (const r of results) {
+    for (let i = 0; i < n; i++) {
+      btn.textContent = `Sende ${i + 1}/${n} an SI-DEV ...`;
+      const r = await apiRandomOne();
       history.push({ input: r.input, stages: r.stages, finalStatus: r.finalStatus, finalClass: r.finalClass, finalDetail: r.finalDetail });
-      if (animate) { await animateResult(r); await sleep(150); }
+      counts[r.finalStatus] = (counts[r.finalStatus] || 0) + 1;
+      if (animate) { await animateResult(r); }
       renderLog();
     }
     if (!animate) {
-      const counts = {};
-      results.forEach(r => counts[r.finalStatus] = (counts[r.finalStatus] || 0) + 1);
       const banner = document.getElementById('outcome');
       banner.className = 'outcome-banner show pass';
       banner.innerHTML = `<b>${n} Nachrichten verarbeitet</b><span class="desc">${Object.entries(counts).map(([k,v]) => `${v}x ${k}`).join(', ')}</span>`;
