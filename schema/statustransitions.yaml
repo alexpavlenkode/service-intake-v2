@@ -22,6 +22,12 @@
 # Arbeit (i.e. any non-terminal state) - flagged, confirm before relying on
 # this in a validator.
 #
+# Storniert -> Neu was added on request (2026-09-30): Storniert was
+# otherwise a dead end (no fromStatus: Storniert row existed at all), so a
+# cancelled work order could never be reopened. Only Storniert -> Neu is
+# allowed back out, not directly to Zugewiesen/In Arbeit/Abgeschlossen - a
+# reopened order re-enters the normal Disponent-assigns-first flow.
+#
 # fromStatus: "(none)" rows (added 2026-09, review item 15/16): these are
 # not real state transitions - they encode the one status value each entity
 # is allowed to have on Create. seed-statustransitions.ps1 maps "(none)" to
@@ -135,3 +141,7 @@ workOrderTransitions:
     toStatus: Storniert
     trigger: Disponent
     reason: "Auftrag storniert (INFERRED)"
+  - fromStatus: Storniert
+    toStatus: Neu
+    trigger: Disponent
+    reason: "Stornierung rueckgaengig gemacht - Auftrag wird erneut aufgenommen (added 2026-09-30, on request)"
