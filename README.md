@@ -1,5 +1,7 @@
 # Service Intake V2
 
+**Demo video:** https://youtu.be/QXED9z5YS04
+
 Automated Dataverse deployment for the Service Intake V2 data model, targeting
 the **SI-DEV** environment. Source of truth for the business process and data
 model: [`docs/01-prozessbeschreibung.md`](docs/01-prozessbeschreibung.md) and
