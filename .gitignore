@@ -27,6 +27,13 @@ Thumbs.db
 # Local Claude Code permission overrides - machine-specific, not shared
 .claude/settings.local.json
 
+# Real Dataverse environment config (Org URL + Tenant ID) - not a credential
+# by itself, but identifies exactly which tenant/environment to target, so
+# it stays out of a public repo. Copy scripts/config*.psd1.example to the
+# non-.example filename and fill in your own environment's values.
+scripts/config.psd1
+scripts/config.si-test.psd1
+
 # .NET build output - rebuilt by `dotnet build -c Release`, not tracked.
 # The .snk strong-name key IS tracked (see plugins/*/*.snk) - it's not a
 # security secret, just an assembly identity token Dataverse's
