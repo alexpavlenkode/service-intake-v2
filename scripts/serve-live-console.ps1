@@ -77,10 +77,31 @@ function Test-IsNotARequest {
     return $false
 }
 
+function ConvertTo-JsonSafe {
+    # PowerShell 5.1's ConvertTo-Json collapses a 1-element array into a
+    # bare JSON object instead of a single-element JSON array WHEN THAT
+    # ARRAY IS PIPED IN (pipeline enumeration invokes it once per element,
+    # so it never sees "an array" at all for a 1-item input) - this is what
+    # broke the browser with "results is not iterable" whenever exactly one
+    # message was sent via /api/random. -InputObject avoids the pipeline
+    # collapse for the TOP-LEVEL value, which is the only place this
+    # function is used (nested array properties inside an object are
+    # serialized correctly regardless of element count - the bug is
+    # specifically a pipeline-enumeration artifact, not a general
+    # single-element-array problem).
+    param([Parameter(Mandatory)] $InputObject, [int] $Depth = 10)
+    ConvertTo-Json -InputObject $InputObject -Depth $Depth
+}
+
 function Invoke-RealMessage {
     param([hashtable] $Msg)
     $result = Invoke-ServiceIntakeMessage -OrgUrl $org -Msg $Msg
-    $stages = $result.stages | ForEach-Object { @{ name = $_.name; result = $StageResultClass[$_.result]; detail = $_.detail } }
+    # @(...) forces this to stay a real array even when $result.stages has
+    # exactly one element (the Duplicate outcome always does) - ForEach-Object
+    # assigned straight to a variable otherwise unwraps a single output into
+    # a bare hashtable, which would then serialize as a JSON object instead
+    # of a one-item array for the frontend's per-stage rendering.
+    $stages = @($result.stages | ForEach-Object { @{ name = $_.name; result = $StageResultClass[$_.result]; detail = $_.detail } })
     return @{
         stages = $stages
         finalStatus = $FinalStatusDisplay[$result.finalStatus]
@@ -169,7 +190,7 @@ try {
                     $r['input'] = $m
                     $results.Add($r)
                 }
-                $json = $results | ConvertTo-Json -Depth 10
+                $json = ConvertTo-JsonSafe -InputObject $results.ToArray()
                 $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
                 $res.ContentType = 'application/json; charset=utf-8'
                 $res.ContentLength64 = $bytes.Length
